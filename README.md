@@ -13,13 +13,13 @@ git clone git@github.com:ShreyaGhateCSYE6225/infrastructure.git
 cd infrastructure 
 
 # Create Stack
-aws cloudformation create-stack --profile demo --stack-name assignment --template-body file://csye6225-infra.yml
+aws cloudformation create-stack --profile demo --region us-east-1 --stack-name assignment --template-body file://csye6225-infra.yml
 OR
-aws cloudformation deploy --profile demo --stack-name assignment --template-file csye6225-infra.yml
+aws cloudformation deploy --profile demo --region us-east-1 --stack-name assignment --template-file csye6225-infra.yml
 
 # Update Stack
-aws cloudformation update-stack --profile demo --stack-name assignment --template-body file://csye6225-infra.yml
+aws cloudformation update-stack --profile demo --region us-east-1 --stack-name assignment --template-body file://csye6225-infra.yml
 
 # Delete Stack
-aws cloudformation delete-stack --profile demo --stack-name assignment                                   
+aws cloudformation delete-stack --profile demo --region us-east-1 --stack-name assignment                                   
 ```
