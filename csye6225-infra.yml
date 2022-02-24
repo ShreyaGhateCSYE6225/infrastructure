@@ -1,11 +1,27 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Deploy a VPC for CSYE 6225 Assignment 3
 
+Parameters: 
+  VpcCidrBlock:
+    Description: "CIDR block for VPC"
+    Type: String
+    Default: "10.0.0.0/16"
+
+  DbSubnetIpBlocks: 
+    Description: "Comma-delimited list of three CIDR blocks"
+    Type: CommaDelimitedList
+    Default: "10.0.0.0/24, 10.0.1.0/24, 10.0.2.0/24"
+
+  DestinationPublicRouteCidrBlock:   
+    Description: "Destination CIDR block for Public Route"
+    Type: String
+    Default: "0.0.0.0/0"
+
 Resources:
   VPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: "10.0.0.0/16"
+      CidrBlock: !Ref VpcCidrBlock
       EnableDnsSupport: 'true'
       EnableDnsHostnames: 'true'
       InstanceTenancy: 'default'
@@ -30,7 +46,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.0.0/24
+      CidrBlock: !Select [0, !Ref DbSubnetIpBlocks]
       AvailabilityZone: !Select
         - '0'
         - !GetAZs ''
@@ -42,7 +58,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.1.0/24
+      CidrBlock: !Select [1, !Ref DbSubnetIpBlocks]
       AvailabilityZone: !Select 
         - '1'
         - !GetAZs ''
@@ -54,7 +70,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.2.0/24
+      CidrBlock: !Select [2, !Ref DbSubnetIpBlocks]
       AvailabilityZone: !Select 
         - '2'
         - !GetAZs ''
@@ -74,7 +90,7 @@ Resources:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PublicRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
+      DestinationCidrBlock: !Ref DestinationPublicRouteCidrBlock
       GatewayId: !Ref InternetGateway
 
   Subnet1RouteTableAssociation:
