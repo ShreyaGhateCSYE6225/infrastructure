@@ -16,11 +16,36 @@ Parameters:
     Description: "Destination CIDR block for Public Route"
     Type: String
     Default: "0.0.0.0/0"
+
+  SecurityGroupCidrBlock:   
+    Description: "CIDR block for Security Group"
+    Type: String
+    Default: "0.0.0.0/0"
   
   ImageId:
     Description: "AMI ID for creating EC2 Instance"
     Type: String
     Default: ""
+
+  HTTPPort:
+    Description: "HTTP Port"
+    Type: String
+    Default: "80"
+
+  HTTPSPort:
+    Description: "HTTPS Port"
+    Type: String
+    Default: "443"
+
+  SshPort:
+    Description: "SSH Port"
+    Type: String
+    Default: "22"
+
+  WebAppPort:
+    Description: "Port for running the web application"
+    Type: String
+    Default: "8080"
 
 Resources:
   VPC:
@@ -125,26 +150,26 @@ Resources:
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
+          FromPort: !Ref HTTPPort
+          ToPort: !Ref HTTPPort
+          CidrIp: !Ref SecurityGroupCidrBlock
         - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
+          FromPort: !Ref SshPort
+          ToPort: !Ref SshPort
+          CidrIp: !Ref SecurityGroupCidrBlock
         - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
+          FromPort: !Ref HTTPSPort
+          ToPort: !Ref HTTPSPort
+          CidrIp: !Ref SecurityGroupCidrBlock
         - IpProtocol: tcp
-          FromPort: 8080
-          ToPort: 8080
-          CidrIp: 0.0.0.0/0
+          FromPort: !Ref WebAppPort
+          ToPort: !Ref WebAppPort
+          CidrIp: !Ref SecurityGroupCidrBlock
       SecurityGroupEgress:
         - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
+          FromPort: !Ref HTTPPort
+          ToPort: !Ref HTTPPort
+          CidrIp: !Ref SecurityGroupCidrBlock
       Tags:
         - Key: Name
           Value: myVPC EC2 Security Group
