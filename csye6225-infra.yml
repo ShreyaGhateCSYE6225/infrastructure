@@ -47,6 +47,21 @@ Parameters:
     Type: String
     Default: "8080"
 
+  VolumeType:
+    Description: "Volume Type"
+    Type: String
+    Default: "gp2"
+
+  VolumeSize:
+    Description: "Volume Size"
+    Type: String
+    Default: "20"
+
+  DeleteOnTermination:
+    Description: "Delete on Termination"
+    Type: String
+    Default: "false"
+
 Resources:
   VPC:
     Type: AWS::EC2::VPC
@@ -188,9 +203,9 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
-            VolumeType: gp2
-            VolumeSize: '20'
-            DeleteOnTermination: 'false'
+            VolumeType: !Ref VolumeType
+            VolumeSize: !Ref VolumeSize
+            DeleteOnTermination: !Ref DeleteOnTermination
       Tags:
         - Key: Name
           Value: myVPC EC2 Instance
