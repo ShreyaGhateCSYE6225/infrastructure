@@ -137,33 +137,29 @@ Resources:
           CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
         - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: myVPC EC2 Security Group
 
-  # NewVolume:
-  #   Type: AWS::EC2::Volume
-  #   Properties: 
-  #     Size: 20
-  #     VolumeType: gp2
-  #     DeleteOnTermination: false
-
   EC2Instance:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: t2.micro
-      # ImageId: ami-80861296
-      ImageId: 
+      ImageId: !Ref ImageId
         # Fn::FindInMap: 
         # - "RegionMap"
         # - Ref: "AWS::Region"
         # - "AMI"
-        - !Ref ImageId
-      SecurityGroupIds:
+        # - !Ref ImageId
+      NetworkInterfaces: 
+      - AssociatePublicIpAddress: "true"
+        DeviceIndex: "0"
+        GroupSet: 
         - !Ref ApplicationSecurityGroup
-      SubnetId: !Ref Subnet1
-      KeyName: !Ref KeyName
+        SubnetId: !Ref Subnet1
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
@@ -193,3 +189,4 @@ Outputs:
     Value: !GetAtt 
       - Subnet3
       - AvailabilityZone
+
