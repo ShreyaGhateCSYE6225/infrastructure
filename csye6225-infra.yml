@@ -60,7 +60,7 @@ Parameters:
   DeleteOnTermination:
     Description: "Delete on Termination"
     Type: String
-    Default: "false"
+    Default: "true"
 
 Resources:
   VPC:
