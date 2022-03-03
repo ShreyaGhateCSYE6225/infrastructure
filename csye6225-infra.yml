@@ -16,6 +16,11 @@ Parameters:
     Description: "Destination CIDR block for Public Route"
     Type: String
     Default: "0.0.0.0/0"
+  
+  ImageId:
+    Description: "AMI ID for creating EC2 Instance"
+    Type: String
+    Default: ""
 
 Resources:
   VPC:
@@ -149,11 +154,6 @@ Resources:
     Properties:
       InstanceType: t2.micro
       ImageId: !Ref ImageId
-        # Fn::FindInMap: 
-        # - "RegionMap"
-        # - Ref: "AWS::Region"
-        # - "AMI"
-        # - !Ref ImageId
       NetworkInterfaces: 
       - AssociatePublicIpAddress: "true"
         DeviceIndex: "0"
