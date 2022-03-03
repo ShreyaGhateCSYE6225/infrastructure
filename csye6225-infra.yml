@@ -16,6 +16,11 @@ Parameters:
     Description: "Destination CIDR block for Public Route"
     Type: String
     Default: "0.0.0.0/0"
+  
+  ImageId:
+    Description: "AMI ID for creating EC2 Instance"
+    Type: String
+    Default: ""
 
 Resources:
   VPC:
@@ -112,6 +117,59 @@ Resources:
       SubnetId: !Ref Subnet3
       RouteTableId: !Ref PublicRouteTable
 
+  ApplicationSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Web Service
+      GroupName: web     
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: myVPC EC2 Security Group
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref ImageId
+      NetworkInterfaces: 
+      - AssociatePublicIpAddress: "true"
+        DeviceIndex: "0"
+        GroupSet: 
+        - !Ref ApplicationSecurityGroup
+        SubnetId: !Ref Subnet1
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp2
+            VolumeSize: '20'
+            DeleteOnTermination: 'false'
+      Tags:
+        - Key: Name
+          Value: myVPC EC2 Instance
+
 Outputs:
   VPC:
     Description: VPC
@@ -131,3 +189,4 @@ Outputs:
     Value: !GetAtt 
       - Subnet3
       - AvailabilityZone
+
