@@ -77,14 +77,24 @@ Parameters:
     Description: Bucket Name
     Default: "ja6kly2x9k.dev.shreyaghate.me"
     # Default: "gDI93fzreJ.prod.shreyaghate.me"
-  
-  DBMasterUsername:
-    Description: 'The master user name for the DB instance (ignored when DBSnapshotIdentifier is set, value used from snapshot).'
+
+  S3BucketRegion:
     Type: String
-    Default: csye6225
+    Description: "Bucket Region"
+    Default: "us-east-1"
+
+  DBMasterUsername:
+    Description: 'The master user name for the DB instance'
+    Type: String
+    Default: 'csye6225'
+
+  DBName:
+    Description: 'The name for the DB instance'
+    Type: String
+    Default: 'csye6225'
 
   DBMasterUserPassword:
-    Description: 'The master password for the DB instance (ignored when DBSnapshotIdentifier is set, value used from snapshot. Also ignored when ParentSecretStack is used).'
+    Description: 'The master password for the DB instance'
     Type: String
     NoEcho: true
     Default: 'shreyardspassword'
@@ -333,6 +343,8 @@ Resources:
 
   EC2Instance:
     Type: AWS::EC2::Instance
+    DependsOn: 
+    - RDSDatabaseInstance
     Properties:
       InstanceType: t2.micro
       ImageId: !Ref ImageId
@@ -352,12 +364,52 @@ Resources:
       Tags:
         - Key: Name
           Value: myVPC EC2 Instance
+      UserData:
+        Fn::Base64: 
+          !Sub |
+            #!/bin/bash
+
+            sudo chmod 777 /etc/profile.d/webapp.sh
+
+            echo "export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}" >> /etc/profile.d/webapp.sh
+            echo "export DB_USERNAME=${DBMasterUsername}" >> /etc/profile.d/webapp.sh 
+            echo "export DB_PASSWORD=${DBMasterUserPassword}" >> /etc/profile.d/webapp.sh  
+            echo "export DB_NAME=${DBName}" >> /etc/profile.d/webapp.sh  
+            echo "export S3_BUCKET_NAME=${S3BucketName}" >> /etc/profile.d/webapp.sh 
+            echo "export AWS_BUCKET_REGION=${S3BucketRegion}" >> /etc/profile.d/webapp.sh 
+
+      # UserData: !Base64 
+      #   'Fn::Sub': 
+      #     - |-
+      #       <script>
+      #       export DB_CONNECTION="${RdsEndpoint}"
+      #       </script>
+      #     - { RdsEndpoint: !GetAtt Rds.Endpoint.Address }
+
+      # UserData:
+      #   Fn::Base64: 
+      #     Fn::Sub: |
+      #       #!/bin/bash
+            
+      #       cat > /etc/profile.d/webapp.sh << 'EOF'
+
+      #       echo "export DB_HOSTNAME=${}" >> /etc/profile.d/webapp.sh
+      #       echo "export DB_USERNAME=${}" >> /etc/profile.d/webapp.sh
+      #       echo "export DB_PASSWORD=${}" >> /etc/profile.d/webapp.sh
+      #       echo "export S3_BUCKET_NAME=${S3BucketName}" >> /etc/profile.d/webapp.sh
+
+      #       EOF
   
   S3Bucket:
     Type: 'AWS::S3::Bucket'
     Properties:
-      AccessControl: BucketOwnerFullControl
+      AccessControl: Private
       BucketName: !Ref S3BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       LifecycleConfiguration:
         Rules:
           - Id: Rule for log prefix
@@ -366,10 +418,11 @@ Resources:
             Transitions:
               - TransitionInDays: 30
                 StorageClass: STANDARD_IA
-      # BucketEncryption:
-      #   ServerSideEncryptionConfiguration:
-      #     - ServerSideEncryptionByDefault:
-      #         SSEAlgorithm: AES256
+            ExpirationInDays: 60
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
 
   RDSParameterGroup:
     Type: AWS::RDS::DBParameterGroup
@@ -405,45 +458,50 @@ Resources:
     # DeletionPolicy: Snapshot
     # UpdateReplacePolicy: Snapshot
 
-  WebAppS3:
-    Type: AWS::S3::BucketPolicy
+  WebAppS3IAMPolicy:
+    Type: AWS::IAM::Policy
     Properties:
-      Bucket: !Ref S3Bucket
+      PolicyName: WebAppS3
       PolicyDocument:
-        Id: WebAppS3
-        Version: '2012-10-17'
-        # Roles:
-        # - !Ref IAMRole
+        Version: "2012-10-17"
         Statement:
-          - Sid: ReadAccess
+          - Effect: Allow
             Action:
-            - s3:GetObject
-            Effect: Allow
-            Principal: "*"
-            Resource:
-              - !Sub arn:aws:s3:::${S3Bucket}
-              - !Sub arn:aws:s3:::${S3Bucket}/*
+            - 's3:CreateBucket'
+            - 's3:DeleteBucket'
+            Resource: !GetAtt 'S3Bucket.Arn'
+          - Effect: Allow
+            Action:
+            - 's3:PutObject'
+            - 's3:GetObject'
+            - 's3:DeleteObject'
+            Resource: !Join ['', [!GetAtt 'S3Bucket.Arn','/*' ]]
+      Roles:
+      - !Ref WebAppS3IAMRole
 
-  IAMRole:
+  WebAppS3IAMRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: EC2-CSYE6225
+      Description: IAM Role for Web App and S3
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - ec2.amazonaws.com
-          Action:
-          - sts:AssumeRole
-      Path: "/"
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
 
   IAMInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
+      InstanceProfileName: IAMInstanceProfile
       Path: "/"
       Roles:
-      - !Ref IAMRole
+      - !Ref WebAppS3IAMRole
 
 Outputs:
   VPC:
