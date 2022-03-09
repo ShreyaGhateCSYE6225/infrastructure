@@ -13,7 +13,7 @@ git clone git@github.com:ShreyaGhateCSYE6225/infrastructure.git
 cd infrastructure 
 
 # Create Stack
-aws cloudformation create-stack --profile demo --region us-east-1 --stack-name assignment --parameters ParameterKey=ImageId,ParameterValue="AMI ID" --template-body file://csye6225-infra.yml
+aws cloudformation create-stack --profile demo --region us-east-1 --stack-name assignment --parameters ParameterKey=ImageId,ParameterValue="AMI ID" --template-body file://csye6225-infra.yml  --capabilities CAPABILITY_NAMED_IAM --profile dev
 
 # Update Stack
 aws cloudformation update-stack --profile demo --region us-east-1 --stack-name assignment --template-body file://csye6225-infra.yml

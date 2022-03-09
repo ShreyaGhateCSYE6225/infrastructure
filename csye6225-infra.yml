@@ -12,6 +12,11 @@ Parameters:
     Type: CommaDelimitedList
     Default: "10.0.0.0/24, 10.0.1.0/24, 10.0.2.0/24"
 
+  PrivateSubnetCIDRBlocks: 
+    Description: "Comma-delimited list of three CIDR blocks for Private Subnets"
+    Type: CommaDelimitedList
+    Default: "10.0.30.0/24, 10.0.40.0/24, 10.0.50.0/24"
+
   DestinationPublicRouteCidrBlock:   
     Description: "Destination CIDR block for Public Route"
     Type: String
@@ -62,6 +67,49 @@ Parameters:
     Type: String
     Default: "true"
 
+  RDSPort:
+    Description: "TCP Port"
+    Type: String
+    Default: "5432"
+
+  S3BucketName:
+    Type: String
+    Description: Bucket Name
+    Default: "ja6kly2x9k.dev.shreyaghate.me"
+    # Default: "gDI93fzreJ.prod.shreyaghate.me"
+
+  S3BucketRegion:
+    Type: String
+    Description: "Bucket Region"
+    Default: "us-east-1"
+
+  DBMasterUsername:
+    Description: 'The master user name for the DB instance'
+    Type: String
+    Default: 'csye6225'
+
+  DBName:
+    Description: 'The name for the DB instance'
+    Type: String
+    Default: 'csye6225'
+
+  DBMasterUserPassword:
+    Description: 'The master password for the DB instance'
+    Type: String
+    NoEcho: true
+    Default: 'shreyardspassword'
+
+  RDSParameterGroupFamily:
+    Description: "Database Family Group"
+    Type: String
+    Default: "postgres13"
+
+  DBEngineVersion:
+    Description: 'PostgreSQL version.'
+    Type: String
+    Default: '13.3'
+    AllowedValues: ['10.1', '10.3', '10.4', '10.5', '10.6', '10.7', '10.9', '10.10', '10.11', '10.12', '10.13', '10.14', '11.1', '11.2', '11.4', '11.5', '11.6', '11.7', '11.8', '11.9', '12.2', '12.3', '12.4', '12.7', '12.8', '12.9', '13.3']
+
 Resources:
   VPC:
     Type: AWS::EC2::VPC
@@ -87,7 +135,7 @@ Resources:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
 
-  Subnet1:
+  PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
@@ -97,9 +145,9 @@ Resources:
         - !GetAZs ''
       Tags:
         - Key: Name
-          Value: myVPC Subnet 1
+          Value: myVPC Public Subnet 1
 
-  Subnet2:
+  PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
@@ -109,9 +157,9 @@ Resources:
         - !GetAZs ''
       Tags:
         - Key: Name
-          Value: myVPC Subnet 2
+          Value: myVPC Public Subnet 2
 
-  Subnet3:
+  PublicSubnet3:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
@@ -121,7 +169,40 @@ Resources:
         - !GetAZs ''
       Tags:
         - Key: Name
-          Value: myVPC Subnet 3
+          Value: myVPC Public Subnet 3
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: !Select [0, !Ref PrivateSubnetCIDRBlocks]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: myVPC Private Subnet 1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: !Select [1, !Ref PrivateSubnetCIDRBlocks]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: myVPC Private Subnet 2
+  
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 2, !GetAZs  '' ]
+      CidrBlock: !Select [2, !Ref PrivateSubnetCIDRBlocks]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: myVPC Private Subnet 3
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
@@ -130,32 +211,79 @@ Resources:
       Tags:
         - Key: Name
           Value: myVPC Public Route Table
+  
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: myVPC Private Route Table
 
   PublicRoute:
     Type: AWS::EC2::Route
+    DependsOn: 
+    - InternetGateway
+    - AttachGateway
     Properties:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: !Ref DestinationPublicRouteCidrBlock
       GatewayId: !Ref InternetGateway
 
-  Subnet1RouteTableAssociation:
+  # PrivateRoute:
+  #       Type: AWS::EC2::Route
+  #       Properties:
+  #         RouteTableId: !Ref PrivateRouteTable
+  #         DestinationCidrBlock: 0.0.0.0/0
+
+  PublicSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref Subnet1
+      SubnetId: !Ref PublicSubnet1
       RouteTableId: !Ref PublicRouteTable
 
-  Subnet2RouteTableAssociation:
+  PublicSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref Subnet2
+      SubnetId: !Ref PublicSubnet2
       RouteTableId: !Ref PublicRouteTable
 
-  
-  Subnet3RouteTableAssociation:
+  PublicSubnet3RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref Subnet3
+      SubnetId: !Ref PublicSubnet3
       RouteTableId: !Ref PublicRouteTable
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet3
+      RouteTableId: !Ref PrivateRouteTable
+
+  DBPrivateSubnetGroup: 
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties: 
+      DBSubnetGroupDescription: 'DB Subnet Group'
+      SubnetIds: 
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+        - !Ref PrivateSubnet3
+      Tags: 
+        - 
+          Key: Name
+          Value: myVPC DB Subnet Group
 
   ApplicationSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -189,17 +317,41 @@ Resources:
         - Key: Name
           Value: myVPC EC2 Security Group
 
+  # DatabaseSecurityGroup: 
+  #   Type: AWS::RDS::DBSecurityGroup
+  #   Properties: 
+  #     EC2VpcId: !Ref VPC
+  #     DBSecurityGroupIngress:
+  #       # CIDRIP: '10.0.0.0/16'
+  #       # EC2SecurityGroupName: !Ref ApplicationSecurityGroup
+  #       EC2SecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
+  #     GroupDescription: "RDS PostgreSQL Access"
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "RDS PostgreSQL Access"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref RDSPort
+          ToPort: !Ref RDSPort
+          SourceSecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
+
   EC2Instance:
     Type: AWS::EC2::Instance
+    DependsOn: 
+    - RDSDatabaseInstance
     Properties:
       InstanceType: t2.micro
       ImageId: !Ref ImageId
+      # IamInstanceProfile: !Ref IAMInstanceProfile
       NetworkInterfaces: 
       - AssociatePublicIpAddress: "true"
         DeviceIndex: "0"
         GroupSet: 
         - !Ref ApplicationSecurityGroup
-        SubnetId: !Ref Subnet1
+        SubnetId: !Ref  PublicSubnet1
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
@@ -209,6 +361,144 @@ Resources:
       Tags:
         - Key: Name
           Value: myVPC EC2 Instance
+      UserData:
+        Fn::Base64: 
+          !Sub |
+            #!/bin/bash
+
+            sudo chmod 777 /etc/profile.d/webapp.sh
+
+            echo "export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}" >> /etc/profile.d/webapp.sh
+            echo "export DB_USERNAME=${DBMasterUsername}" >> /etc/profile.d/webapp.sh 
+            echo "export DB_PASSWORD=${DBMasterUserPassword}" >> /etc/profile.d/webapp.sh  
+            echo "export DB_NAME=${DBName}" >> /etc/profile.d/webapp.sh  
+            echo "export S3_BUCKET_NAME=${S3BucketName}" >> /etc/profile.d/webapp.sh 
+            echo "export AWS_BUCKET_REGION=${S3BucketRegion}" >> /etc/profile.d/webapp.sh 
+
+      # UserData: !Base64 
+      #   'Fn::Sub': 
+      #     - |-
+      #       <script>
+      #       export DB_CONNECTION="${RdsEndpoint}"
+      #       </script>
+      #     - { RdsEndpoint: !GetAtt Rds.Endpoint.Address }
+
+      # UserData:
+      #   Fn::Base64: 
+      #     Fn::Sub: |
+      #       #!/bin/bash
+            
+      #       cat > /etc/profile.d/webapp.sh << 'EOF'
+
+      #       echo "export DB_HOSTNAME=${}" >> /etc/profile.d/webapp.sh
+      #       echo "export DB_USERNAME=${}" >> /etc/profile.d/webapp.sh
+      #       echo "export DB_PASSWORD=${}" >> /etc/profile.d/webapp.sh
+      #       echo "export S3_BUCKET_NAME=${S3BucketName}" >> /etc/profile.d/webapp.sh
+
+      #       EOF
+  
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      AccessControl: Private
+      BucketName: !Ref S3BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: Rule for log prefix
+            Prefix: logs
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+            ExpirationInDays: 60
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  RDSParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties: 
+      Description: CloudFormation Sample PostgreSQL Parameter Group
+      Family: !Ref RDSParameterGroupFamily
+      # Parameters: 
+      #   # Key : Value
+      Tags:
+      - Key: Name
+        Value: myVPC RDS Instance
+
+  RDSDatabaseInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: 'csye6225'
+      AllocatedStorage: "5"
+      DBInstanceClass: db.t3.micro
+      Engine: postgres
+      EngineVersion: !Ref DBEngineVersion
+      MultiAZ: 'false'
+      DBParameterGroupName:
+        Ref: RDSParameterGroup  
+      DBSubnetGroupName: !Ref DBPrivateSubnetGroup   
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterUserPassword
+      DBName: 'csye6225'
+      VPCSecurityGroups: 
+        - !GetAtt DatabaseSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: myVPC RDS Instance
+    # DeletionPolicy: Snapshot
+    # UpdateReplacePolicy: Snapshot
+
+  WebAppS3IAMPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: WebAppS3
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+            - 's3:CreateBucket'
+            - 's3:DeleteBucket'
+            Resource: !GetAtt 'S3Bucket.Arn'
+          - Effect: Allow
+            Action:
+            - 's3:PutObject'
+            - 's3:GetObject'
+            - 's3:DeleteObject'
+            Resource: !Join ['', [!GetAtt 'S3Bucket.Arn','/*' ]]
+      Roles:
+      - !Ref WebAppS3IAMRole
+
+  WebAppS3IAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EC2-CSYE6225
+      Description: IAM Role for Web App and S3
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+
+  IAMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: IAMInstanceProfile
+      Path: "/"
+      Roles:
+      - !Ref WebAppS3IAMRole
 
 Outputs:
   VPC:
@@ -217,16 +507,20 @@ Outputs:
   AZ1:
     Description: Availability Zone 1
     Value: !GetAtt 
-      - Subnet1
+      - PublicSubnet1
       - AvailabilityZone
   AZ2:
     Description: Availability Zone 2
     Value: !GetAtt 
-      - Subnet2
+      - PublicSubnet2
       - AvailabilityZone
   AZ3:
     Description: Availability Zone 3
     Value: !GetAtt 
-      - Subnet3
+      - PublicSubnet3
       - AvailabilityZone
+
+  S3Bucket:
+    Description: S3 Bucket
+    Value: !Ref S3Bucket
 
