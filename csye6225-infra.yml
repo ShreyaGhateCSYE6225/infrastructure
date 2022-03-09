@@ -308,9 +308,6 @@ Resources:
           FromPort: !Ref WebAppPort
           ToPort: !Ref WebAppPort
           CidrIp: !Ref SecurityGroupCidrBlock
-        - IpProtocol: tcp
-          FromPort: !Ref RDSPort
-          ToPort: !Ref RDSPort
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: !Ref HTTPPort
@@ -348,7 +345,7 @@ Resources:
     Properties:
       InstanceType: t2.micro
       ImageId: !Ref ImageId
-      IamInstanceProfile: !Ref IAMInstanceProfile
+      # IamInstanceProfile: !Ref IAMInstanceProfile
       NetworkInterfaces: 
       - AssociatePublicIpAddress: "true"
         DeviceIndex: "0"
