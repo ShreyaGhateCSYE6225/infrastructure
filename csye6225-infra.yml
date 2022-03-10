@@ -308,11 +308,11 @@ Resources:
           FromPort: !Ref WebAppPort
           ToPort: !Ref WebAppPort
           CidrIp: !Ref SecurityGroupCidrBlock
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: !Ref HTTPPort
-          ToPort: !Ref HTTPPort
-          CidrIp: !Ref SecurityGroupCidrBlock
+      # SecurityGroupEgress:
+      #   - IpProtocol: tcp
+      #     FromPort: 
+      #     ToPort: 
+      #     CidrIp: !Ref SecurityGroupCidrBlock
       Tags:
         - Key: Name
           Value: myVPC EC2 Security Group
@@ -342,10 +342,11 @@ Resources:
     Type: AWS::EC2::Instance
     DependsOn: 
     - RDSDatabaseInstance
+    - S3Bucket
     Properties:
       InstanceType: t2.micro
       ImageId: !Ref ImageId
-      # IamInstanceProfile: !Ref IAMInstanceProfile
+      IamInstanceProfile: !Ref IAMInstanceProfile
       NetworkInterfaces: 
       - AssociatePublicIpAddress: "true"
         DeviceIndex: "0"
@@ -366,39 +367,27 @@ Resources:
           !Sub |
             #!/bin/bash
 
-            sudo chmod 777 /etc/profile.d/webapp.sh
+            cd /home/ec2-user/
+            sudo mkdir -p webservice
+            sudo chmod 755 webservice
+            ls -a
+            cd /home/ec2-user/webservice/ || exit
 
             echo "export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}" >> /etc/profile.d/webapp.sh
-            echo "export DB_USERNAME=${DBMasterUsername}" >> /etc/profile.d/webapp.sh 
+            echo "export DB_USERNAME=${DBMasterUsername}" >> /etc/profile.d/webapp.sh
             echo "export DB_PASSWORD=${DBMasterUserPassword}" >> /etc/profile.d/webapp.sh  
             echo "export DB_NAME=${DBName}" >> /etc/profile.d/webapp.sh  
             echo "export S3_BUCKET_NAME=${S3BucketName}" >> /etc/profile.d/webapp.sh 
             echo "export AWS_BUCKET_REGION=${S3BucketRegion}" >> /etc/profile.d/webapp.sh 
 
-      # UserData: !Base64 
-      #   'Fn::Sub': 
-      #     - |-
-      #       <script>
-      #       export DB_CONNECTION="${RdsEndpoint}"
-      #       </script>
-      #     - { RdsEndpoint: !GetAtt Rds.Endpoint.Address }
+            sudo pm2 start app.js 
+            sudo pm2 startup systemd
+            sudo pm2 save
+            sudo pm2 list
 
-      # UserData:
-      #   Fn::Base64: 
-      #     Fn::Sub: |
-      #       #!/bin/bash
-            
-      #       cat > /etc/profile.d/webapp.sh << 'EOF'
-
-      #       echo "export DB_HOSTNAME=${}" >> /etc/profile.d/webapp.sh
-      #       echo "export DB_USERNAME=${}" >> /etc/profile.d/webapp.sh
-      #       echo "export DB_PASSWORD=${}" >> /etc/profile.d/webapp.sh
-      #       echo "export S3_BUCKET_NAME=${S3BucketName}" >> /etc/profile.d/webapp.sh
-
-      #       EOF
-  
   S3Bucket:
     Type: 'AWS::S3::Bucket'
+    DeletionPolicy: "Delete"
     Properties:
       AccessControl: Private
       BucketName: !Ref S3BucketName
@@ -434,6 +423,7 @@ Resources:
 
   RDSDatabaseInstance:
     Type: AWS::RDS::DBInstance
+    DeletionPolicy: "Delete"
     Properties:
       DBInstanceIdentifier: 'csye6225'
       AllocatedStorage: "5"
@@ -447,6 +437,8 @@ Resources:
       MasterUsername: !Ref DBMasterUsername
       MasterUserPassword: !Ref DBMasterUserPassword
       DBName: 'csye6225'
+      PubliclyAccessible: false #change to false
+      Port: 5432
       VPCSecurityGroups: 
         - !GetAtt DatabaseSecurityGroup.GroupId
       Tags:
@@ -469,6 +461,7 @@ Resources:
             Resource: !GetAtt 'S3Bucket.Arn'
           - Effect: Allow
             Action:
+            - 's3:ListBucket'
             - 's3:PutObject'
             - 's3:GetObject'
             - 's3:DeleteObject'
@@ -490,6 +483,14 @@ Resources:
                 - ec2.amazonaws.com
             Action:
               - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: ListBucketContents
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Join ['', [!GetAtt 'S3Bucket.Arn']]
       Path: /
 
   IAMInstanceProfile:
