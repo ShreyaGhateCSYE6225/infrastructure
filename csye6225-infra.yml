@@ -230,12 +230,6 @@ Resources:
       DestinationCidrBlock: !Ref DestinationPublicRouteCidrBlock
       GatewayId: !Ref InternetGateway
 
-  # PrivateRoute:
-  #       Type: AWS::EC2::Route
-  #       Properties:
-  #         RouteTableId: !Ref PrivateRouteTable
-  #         DestinationCidrBlock: 0.0.0.0/0
-
   PublicSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -308,24 +302,9 @@ Resources:
           FromPort: !Ref WebAppPort
           ToPort: !Ref WebAppPort
           CidrIp: !Ref SecurityGroupCidrBlock
-      # SecurityGroupEgress:
-      #   - IpProtocol: tcp
-      #     FromPort: 
-      #     ToPort: 
-      #     CidrIp: !Ref SecurityGroupCidrBlock
       Tags:
         - Key: Name
           Value: myVPC EC2 Security Group
-
-  # DatabaseSecurityGroup: 
-  #   Type: AWS::RDS::DBSecurityGroup
-  #   Properties: 
-  #     EC2VpcId: !Ref VPC
-  #     DBSecurityGroupIngress:
-  #       # CIDRIP: '10.0.0.0/16'
-  #       # EC2SecurityGroupName: !Ref ApplicationSecurityGroup
-  #       EC2SecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
-  #     GroupDescription: "RDS PostgreSQL Access"
 
   DatabaseSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -363,27 +342,46 @@ Resources:
         - Key: Name
           Value: myVPC EC2 Instance
       UserData:
-        Fn::Base64: 
-          !Sub |
-            #!/bin/bash
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          cat > /etc/environment << 'EOF'
+            export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}
+            export DB_USERNAME=${DBMasterUsername}
+            export DB_PASSWORD=${DBMasterUserPassword}
+            export DB_NAME=${DBName}
+            export S3_BUCKET_NAME=${S3BucketName}
+            export AWS_BUCKET_REGION=${S3BucketRegion}
 
-            cd /home/ec2-user/
-            sudo mkdir -p webservice
-            sudo chmod 755 webservice
-            ls -a
-            cd /home/ec2-user/webservice/ || exit
+          EOF
+          source /etc/profile
+          cd /home/ec2-user/webservice
+          rm -rf node_modules
+          sudo npm i
+          sudo systemctl enable myapp
+          sudo systemctl start myapp
+          sudo pm2 reload all --update-env
+      # UserData:
+      #   Fn::Base64: 
+      #     !Sub |
+      #       #!/bin/bash
 
-            echo "export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}" >> /etc/profile.d/webapp.sh
-            echo "export DB_USERNAME=${DBMasterUsername}" >> /etc/profile.d/webapp.sh
-            echo "export DB_PASSWORD=${DBMasterUserPassword}" >> /etc/profile.d/webapp.sh  
-            echo "export DB_NAME=${DBName}" >> /etc/profile.d/webapp.sh  
-            echo "export S3_BUCKET_NAME=${S3BucketName}" >> /etc/profile.d/webapp.sh 
-            echo "export AWS_BUCKET_REGION=${S3BucketRegion}" >> /etc/profile.d/webapp.sh 
+      #       cd /home/ec2-user/
+      #       sudo mkdir -p webservice
+      #       sudo chmod 755 webservice
+      #       ls -a
+      #       cd /home/ec2-user/webservice/ || exit
 
-            sudo pm2 start app.js 
-            sudo pm2 startup systemd
-            sudo pm2 save
-            sudo pm2 list
+      #       echo "export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}" >> /etc/profile.d/webapp.sh
+      #       echo "export DB_USERNAME=${DBMasterUsername}" >> /etc/profile.d/webapp.sh
+      #       echo "export DB_PASSWORD=${DBMasterUserPassword}" >> /etc/profile.d/webapp.sh  
+      #       echo "export DB_NAME=${DBName}" >> /etc/profile.d/webapp.sh  
+      #       echo "export S3_BUCKET_NAME=${S3BucketName}" >> /etc/profile.d/webapp.sh 
+      #       echo "export AWS_BUCKET_REGION=${S3BucketRegion}" >> /etc/profile.d/webapp.sh 
+
+      #       sudo pm2 start app.js 
+      #       sudo pm2 startup systemd
+      #       sudo pm2 save
+      #       sudo pm2 list
 
   S3Bucket:
     Type: 'AWS::S3::Bucket'
