@@ -75,8 +75,8 @@ Parameters:
   S3BucketName:
     Type: String
     Description: Bucket Name
-    Default: "ja6kly2x9k.dev.shreyaghate.me"
-    # Default: "gDI93fzreJ.prod.shreyaghate.me"
+    # Default: "ja6kly2x9k.dev.shreyaghate.me"
+    Default: "gDI93fzreJ.prod.shreyaghate.me"
 
   S3BucketRegion:
     Type: String
@@ -360,32 +360,10 @@ Resources:
           sudo systemctl enable myapp
           sudo systemctl start myapp
           sudo pm2 reload all --update-env
-      # UserData:
-      #   Fn::Base64: 
-      #     !Sub |
-      #       #!/bin/bash
-
-      #       cd /home/ec2-user/
-      #       sudo mkdir -p webservice
-      #       sudo chmod 755 webservice
-      #       ls -a
-      #       cd /home/ec2-user/webservice/ || exit
-
-      #       echo "export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}" >> /etc/profile.d/webapp.sh
-      #       echo "export DB_USERNAME=${DBMasterUsername}" >> /etc/profile.d/webapp.sh
-      #       echo "export DB_PASSWORD=${DBMasterUserPassword}" >> /etc/profile.d/webapp.sh  
-      #       echo "export DB_NAME=${DBName}" >> /etc/profile.d/webapp.sh  
-      #       echo "export S3_BUCKET_NAME=${S3BucketName}" >> /etc/profile.d/webapp.sh 
-      #       echo "export AWS_BUCKET_REGION=${S3BucketRegion}" >> /etc/profile.d/webapp.sh 
-
-      #       sudo pm2 start app.js 
-      #       sudo pm2 startup systemd
-      #       sudo pm2 save
-      #       sudo pm2 list
 
   S3Bucket:
     Type: 'AWS::S3::Bucket'
-    DeletionPolicy: "Delete"
+    DeletionPolicy: Delete
     Properties:
       AccessControl: Private
       BucketName: !Ref S3BucketName
@@ -413,8 +391,6 @@ Resources:
     Properties: 
       Description: CloudFormation Sample PostgreSQL Parameter Group
       Family: !Ref RDSParameterGroupFamily
-      # Parameters: 
-      #   # Key : Value
       Tags:
       - Key: Name
         Value: myVPC RDS Instance
@@ -435,15 +411,13 @@ Resources:
       MasterUsername: !Ref DBMasterUsername
       MasterUserPassword: !Ref DBMasterUserPassword
       DBName: 'csye6225'
-      PubliclyAccessible: false #change to false
-      Port: 5432
+      PubliclyAccessible: false 
+      Port: !Ref RDSPort
       VPCSecurityGroups: 
         - !GetAtt DatabaseSecurityGroup.GroupId
       Tags:
         - Key: Name
           Value: myVPC RDS Instance
-    # DeletionPolicy: Snapshot
-    # UpdateReplacePolicy: Snapshot
 
   WebAppS3IAMPolicy:
     Type: AWS::IAM::Policy
