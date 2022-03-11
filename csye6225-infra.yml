@@ -75,8 +75,8 @@ Parameters:
   S3BucketName:
     Type: String
     Description: Bucket Name
-    Default: "ja6kly2x9k.dev.shreyaghate.me"
-    # Default: "gDI93fzreJ.prod.shreyaghate.me"
+    # Default: "ja6kly2x9k.dev.shreyaghate.me"
+    Default: "gDI93fzreJ.prod.shreyaghate.me"
 
   S3BucketRegion:
     Type: String
@@ -344,13 +344,7 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          sed -i '/scripts-user/c\ - [scripts-user, always]' /etc/cloud/cloud.cfg
-            cd /var/lib/cloud/scripts/per-boot/
-            touch reload.sh
-            cat > /var/lib/cloud/scripts/per-boot/reload.sh << 'EOF'
-              sudo pm2 reload all --update-env
-            EOF
-            cat > /etc/environment << 'EOF'
+          cat > /etc/environment << 'EOF'
             export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}
             export DB_USERNAME=${DBMasterUsername}
             export DB_PASSWORD=${DBMasterUserPassword}
@@ -359,13 +353,13 @@ Resources:
             export AWS_BUCKET_REGION=${S3BucketRegion}
 
           EOF
-            source /etc/profile
-            cd /home/ec2-user/webservice
-            rm -rf node_modules
-            sudo npm i
-            sudo systemctl enable myapp
-            sudo systemctl start myapp
-            sudo pm2 reload all --update-env
+          source /etc/profile
+          cd /home/ec2-user/webservice
+          rm -rf node_modules
+          sudo npm i
+          sudo systemctl enable myapp
+          sudo systemctl start myapp
+          sudo pm2 reload all --update-env
 
   S3Bucket:
     Type: 'AWS::S3::Bucket'
@@ -417,7 +411,7 @@ Resources:
       MasterUsername: !Ref DBMasterUsername
       MasterUserPassword: !Ref DBMasterUserPassword
       DBName: 'csye6225'
-      PubliclyAccessible: false #change to false
+      PubliclyAccessible: false 
       Port: !Ref RDSPort
       VPCSecurityGroups: 
         - !GetAtt DatabaseSecurityGroup.GroupId
