@@ -287,21 +287,12 @@ Resources:
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: !Ref HTTPPort
-          ToPort: !Ref HTTPPort
-          CidrIp: !Ref SecurityGroupCidrBlock
-        - IpProtocol: tcp
           FromPort: !Ref SshPort
           ToPort: !Ref SshPort
-          CidrIp: !Ref SecurityGroupCidrBlock
-        - IpProtocol: tcp
-          FromPort: !Ref HTTPSPort
-          ToPort: !Ref HTTPSPort
-          CidrIp: !Ref SecurityGroupCidrBlock
         - IpProtocol: tcp
           FromPort: !Ref WebAppPort
           ToPort: !Ref WebAppPort
-          CidrIp: !Ref SecurityGroupCidrBlock
+          SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
       Tags:
         - Key: Name
           Value: myVPC EC2 Security Group
@@ -316,6 +307,22 @@ Resources:
           FromPort: !Ref RDSPort
           ToPort: !Ref RDSPort
           SourceSecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allows HTTP and HTTPS connections 
+      SecurityGroupIngress:
+        - Description: HTTP IPv4
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref SecurityGroupCidrBlock
+        - Description: HTTPS IPv4
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref SecurityGroupCidrBlock
 
   EC2Instance:
     Type: AWS::EC2::Instance
@@ -360,6 +367,92 @@ Resources:
           sudo systemctl enable myapp
           sudo systemctl start myapp
           sudo pm2 reload all --update-env
+
+  asgLaunchTemplate:
+    Type: 'AWS::EC2::LaunchTemplate'
+    Properties:
+      LaunchTemplateName: 'asg_launch_config'
+      LaunchTemplateData:
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            AssociatePublicIpAddress: true
+            Groups:
+              - !Ref ApplicationSecurityGroup
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: !Ref VolumeType
+            VolumeSize: !Ref VolumeSize
+            DeleteOnTermination: !Ref DeleteOnTermination
+        ImageId: !Ref ImageId
+        InstanceType: t2.micro
+        IamInstanceProfile: !Ref IAMInstanceProfile
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            cat > /etc/environment << 'EOF'
+              export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}
+              export DB_USERNAME=${DBMasterUsername}
+              export DB_PASSWORD=${DBMasterUserPassword}
+              export DB_NAME=${DBName}
+              export S3_BUCKET_NAME=${S3BucketName}
+              export AWS_BUCKET_REGION=${S3BucketRegion}
+
+            EOF
+            source /etc/profile
+            cd /home/ec2-user/webservice
+            rm -rf node_modules
+            sudo npm i
+            sudo systemctl enable myapp
+            sudo systemctl start myapp
+            sudo pm2 reload all --update-env
+        # SecurityGroupIds:
+        #   - sg-0efe1159f9ca25998
+
+  asgWebApp:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub ${AWS::StackName}-asg
+      AvailabilityZones:
+        - us-east-1a
+        - us-east-1b
+        - us-east-1c
+      Cooldown: '60'
+      DesiredCapacity: '3'
+      LaunchTemplate:
+        LaunchTemplateId: !Ref asgLaunchTemplate
+        Version: !GetAtt asgLaunchTemplate.LatestVersionNumber
+      MaxSize: '5'
+      MinSize: '3'
+      LaunchConfigurationName: 'asg_launch_config'
+      Tags:
+        - Key: Application
+          Value: WebApp
+          PropagateAtLaunch: "true"
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-asg
+          PropagateAtLaunch: "true"
+      # VPCZoneIdentifier:
+      #   - subnet-0fa5ba21
+      #   - subnet-1730905a
+      #   - subnet-9c928fc0
+   asgScalingUpPolicy: 
+      Type: AWS::AutoScaling::ScalingPolicy
+      Properties: 
+        AdjustmentType: "ChangeInCapacity"
+        PolicyType: "SimpleScaling"
+        Cooldown: "300"
+        AutoScalingGroupName: !Ref asgWebApp
+        ScalingAdjustment: 1
+
+  asgScalingDownPolicy: 
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties: 
+      AdjustmentType: "ChangeInCapacity"
+      PolicyType: "TargetTrackingScaling"
+      Cooldown: "300"
+      AutoScalingGroupName: !Ref asgWebApp
+      ScalingAdjustment: -1
 
   S3Bucket:
     Type: 'AWS::S3::Bucket'
