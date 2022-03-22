@@ -324,49 +324,49 @@ Resources:
           ToPort: 443
           CidrIp: !Ref SecurityGroupCidrBlock
 
-  EC2Instance:
-    Type: AWS::EC2::Instance
-    DependsOn: 
-    - RDSDatabaseInstance
-    - S3Bucket
-    Properties:
-      InstanceType: t2.micro
-      ImageId: !Ref ImageId
-      IamInstanceProfile: !Ref IAMInstanceProfile
-      NetworkInterfaces: 
-      - AssociatePublicIpAddress: "true"
-        DeviceIndex: "0"
-        GroupSet: 
-        - !Ref ApplicationSecurityGroup
-        SubnetId: !Ref  PublicSubnet1
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs:
-            VolumeType: !Ref VolumeType
-            VolumeSize: !Ref VolumeSize
-            DeleteOnTermination: !Ref DeleteOnTermination
-      Tags:
-        - Key: Name
-          Value: myVPC EC2 Instance
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          cat > /etc/environment << 'EOF'
-            export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}
-            export DB_USERNAME=${DBMasterUsername}
-            export DB_PASSWORD=${DBMasterUserPassword}
-            export DB_NAME=${DBName}
-            export S3_BUCKET_NAME=${S3BucketName}
-            export AWS_BUCKET_REGION=${S3BucketRegion}
+  # EC2Instance:
+  #   Type: AWS::EC2::Instance
+  #   DependsOn: 
+  #   - RDSDatabaseInstance
+  #   - S3Bucket
+  #   Properties:
+  #     InstanceType: t2.micro
+  #     ImageId: !Ref ImageId
+  #     IamInstanceProfile: !Ref IAMInstanceProfile
+  #     NetworkInterfaces: 
+  #     - AssociatePublicIpAddress: "true"
+  #       DeviceIndex: "0"
+  #       GroupSet: 
+  #       - !Ref ApplicationSecurityGroup
+  #       SubnetId: !Ref  PublicSubnet1
+  #     BlockDeviceMappings:
+  #       - DeviceName: /dev/xvda
+  #         Ebs:
+  #           VolumeType: !Ref VolumeType
+  #           VolumeSize: !Ref VolumeSize
+  #           DeleteOnTermination: !Ref DeleteOnTermination
+  #     Tags:
+  #       - Key: Name
+  #         Value: myVPC EC2 Instance
+  #     UserData:
+  #       Fn::Base64: !Sub |
+  #         #!/bin/bash
+  #         cat > /etc/environment << 'EOF'
+  #           export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}
+  #           export DB_USERNAME=${DBMasterUsername}
+  #           export DB_PASSWORD=${DBMasterUserPassword}
+  #           export DB_NAME=${DBName}
+  #           export S3_BUCKET_NAME=${S3BucketName}
+  #           export AWS_BUCKET_REGION=${S3BucketRegion}
 
-          EOF
-          source /etc/profile
-          cd /home/ec2-user/webservice
-          rm -rf node_modules
-          sudo npm i
-          sudo systemctl enable myapp
-          sudo systemctl start myapp
-          sudo pm2 reload all --update-env
+  #         EOF
+  #         source /etc/profile
+  #         cd /home/ec2-user/webservice
+  #         rm -rf node_modules
+  #         sudo npm i
+  #         sudo systemctl enable myapp
+  #         sudo systemctl start myapp
+  #         sudo pm2 reload all --update-env
 
   asgLaunchTemplate:
     Type: 'AWS::EC2::LaunchTemplate'
@@ -432,16 +432,19 @@ Resources:
         - Key: Name
           Value: !Sub ${AWS::StackName}-asg
           PropagateAtLaunch: "true"
-      # VPCZoneIdentifier:
-      #   - subnet-0fa5ba21
-      #   - subnet-1730905a
-      #   - subnet-9c928fc0
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+        - !Ref PublicSubnet3
+      TargetGroupARNs:
+      - !Ref TargetGroup
+
    asgScalingUpPolicy: 
       Type: AWS::AutoScaling::ScalingPolicy
       Properties: 
         AdjustmentType: "ChangeInCapacity"
-        PolicyType: "SimpleScaling"
-        Cooldown: "300"
+        PolicyType: "TargetTrackingScaling"
+        Cooldown: "60"
         AutoScalingGroupName: !Ref asgWebApp
         ScalingAdjustment: 1
 
@@ -450,9 +453,74 @@ Resources:
     Properties: 
       AdjustmentType: "ChangeInCapacity"
       PolicyType: "TargetTrackingScaling"
-      Cooldown: "300"
+      Cooldown: "60"
       AutoScalingGroupName: !Ref asgWebApp
       ScalingAdjustment: -1
+
+  CPUAlarmHigh: 
+     Type: "AWS::CloudWatch::Alarm",
+     Properties: 
+        AlarmDescription: "Scale-up if CPU > 5%",
+        MetricName: "CPUUtilization",
+        Namespace: "AWS/EC2",
+        Statistic: "Average",
+        Threshold: "5",
+        AlarmActions: !Ref asgScalingUpPolicy,
+        Dimensions: 
+        - Name: AutoScalingGroupName
+          Value: !Ref asgWebApp,
+        ComparisonOperator: "GreaterThanThreshold"
+      }
+    },
+
+    CPUAlarmLow: {
+     Type: "AWS::CloudWatch::Alarm",
+     Properties: {
+        AlarmDescription: "Scale-down if CPU < 3%",
+        MetricName: "CPUUtilization",
+        Namespace: "AWS/EC2",
+        Statistic: "Average",
+        Threshold: "3",
+        AlarmActions: !Ref asgScalingDownPolicy,
+        Dimensions: 
+        - Name: AutoScalingGroupName
+          Value: !Ref asgWebApp,
+        ComparisonOperator: "LessThanThreshold"
+      }
+    },
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 90
+      HealthCheckPath: '/'
+      HealthCheckPort: '8080'
+      HealthCheckProtocol: 'HTTP'
+      HealthCheckTimeoutSeconds: 60
+      HealthyThresholdCount: 2
+      IpAddressType: ipv4
+      Name: !Sub ${AWS::StackName}-lb-tg
+      Port: 8080
+      Protocol: 'HTTP'
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-lb-tg
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '20'
+      TargetType: instance
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref VPC
+
+  loadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref loadBalancerTargetGroup
+      LoadBalancerArn: !Ref loadBalancer
+      Port: 80
+      Protocol: HTTP
 
   S3Bucket:
     Type: 'AWS::S3::Bucket'
