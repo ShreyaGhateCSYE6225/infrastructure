@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Deploy a VPC for CSYE 6225 Assignment 3
+Description: CSYE 6225 Assignment 6
 
 Parameters: 
   VpcCidrBlock:
@@ -292,7 +292,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: !Ref WebAppPort
           ToPort: !Ref WebAppPort
-          SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+          # SourceSecurityGroupId: !GetAtt LoadBalancerSecurityGroup.GroupId
       Tags:
         - Key: Name
           Value: myVPC EC2 Security Group
@@ -312,17 +312,20 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allows HTTP and HTTPS connections 
+      VpcId: !Ref VPC
       SecurityGroupIngress:
         - Description: HTTP IPv4
           IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: !Ref SecurityGroupCidrBlock
+          SourceSecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
+          # CidrIp: !Ref SecurityGroupCidrBlock
         - Description: HTTPS IPv4
           IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          CidrIp: !Ref SecurityGroupCidrBlock
+          SourceSecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
+          # CidrIp: !Ref SecurityGroupCidrBlock
 
   # EC2Instance:
   #   Type: AWS::EC2::Instance
@@ -380,13 +383,14 @@ Resources:
               - !Ref ApplicationSecurityGroup
         BlockDeviceMappings:
           - DeviceName: /dev/xvda
-          Ebs:
-            VolumeType: !Ref VolumeType
-            VolumeSize: !Ref VolumeSize
-            DeleteOnTermination: !Ref DeleteOnTermination
+            Ebs:
+              VolumeType: !Ref VolumeType
+              VolumeSize: !Ref VolumeSize
+              DeleteOnTermination: !Ref DeleteOnTermination
         ImageId: !Ref ImageId
         InstanceType: t2.micro
-        IamInstanceProfile: !Ref IAMInstanceProfile
+        IamInstanceProfile: 
+            Name: !Ref IAMInstanceProfile
         UserData:
           Fn::Base64: !Sub |
             #!/bin/bash
@@ -406,8 +410,6 @@ Resources:
             sudo systemctl enable myapp
             sudo systemctl start myapp
             sudo pm2 reload all --update-env
-        # SecurityGroupIds:
-        #   - sg-0efe1159f9ca25998
 
   asgWebApp:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -424,7 +426,6 @@ Resources:
         Version: !GetAtt asgLaunchTemplate.LatestVersionNumber
       MaxSize: '5'
       MinSize: '3'
-      LaunchConfigurationName: 'asg_launch_config'
       Tags:
         - Key: Application
           Value: WebApp
@@ -439,11 +440,32 @@ Resources:
       TargetGroupARNs:
       - !Ref TargetGroup
 
-   asgScalingUpPolicy: 
+  loadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      Name: !Sub ${AWS::StackName}-load-balancer
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+        - !Ref PublicSubnet3
+      Tags:
+        - Key: Application
+          Value: WebApp
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-load-balancer
+      Type: application
+
+  asgScalingUpPolicy: 
       Type: AWS::AutoScaling::ScalingPolicy
       Properties: 
         AdjustmentType: "ChangeInCapacity"
-        PolicyType: "TargetTrackingScaling"
         Cooldown: "60"
         AutoScalingGroupName: !Ref asgWebApp
         ScalingAdjustment: 1
@@ -452,42 +474,43 @@ Resources:
     Type: AWS::AutoScaling::ScalingPolicy
     Properties: 
       AdjustmentType: "ChangeInCapacity"
-      PolicyType: "TargetTrackingScaling"
       Cooldown: "60"
       AutoScalingGroupName: !Ref asgWebApp
       ScalingAdjustment: -1
 
   CPUAlarmHigh: 
-     Type: "AWS::CloudWatch::Alarm",
-     Properties: 
-        AlarmDescription: "Scale-up if CPU > 5%",
-        MetricName: "CPUUtilization",
-        Namespace: "AWS/EC2",
-        Statistic: "Average",
-        Threshold: "5",
-        AlarmActions: !Ref asgScalingUpPolicy,
+    Type: AWS::CloudWatch::Alarm
+    Properties: 
+        AlarmDescription: Scale-up if CPU > 5%
+        MetricName: CPUUtilization
+        Namespace: AWS/EC2
+        Statistic: Average
+        Period: '300'
+        EvaluationPeriods: '2'
+        Threshold: "5"
+        AlarmActions: 
+        - !Ref asgScalingUpPolicy
         Dimensions: 
         - Name: AutoScalingGroupName
-          Value: !Ref asgWebApp,
+          Value: !Ref asgWebApp
         ComparisonOperator: "GreaterThanThreshold"
-      }
-    },
 
-    CPUAlarmLow: {
-     Type: "AWS::CloudWatch::Alarm",
-     Properties: {
-        AlarmDescription: "Scale-down if CPU < 3%",
-        MetricName: "CPUUtilization",
-        Namespace: "AWS/EC2",
-        Statistic: "Average",
-        Threshold: "3",
-        AlarmActions: !Ref asgScalingDownPolicy,
+  CPUAlarmLow: 
+     Type: AWS::CloudWatch::Alarm
+     Properties: 
+        AlarmDescription: Scale-down if CPU < 3%
+        MetricName: CPUUtilization
+        Namespace: AWS/EC2
+        Statistic: Average
+        Period: '300'
+        EvaluationPeriods: '2'
+        Threshold: "3"
+        AlarmActions: 
+        - !Ref asgScalingDownPolicy
         Dimensions: 
         - Name: AutoScalingGroupName
-          Value: !Ref asgWebApp,
+          Value: !Ref asgWebApp
         ComparisonOperator: "LessThanThreshold"
-      }
-    },
 
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -517,7 +540,7 @@ Resources:
     Properties:
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref loadBalancerTargetGroup
+          TargetGroupArn: !Ref TargetGroup
       LoadBalancerArn: !Ref loadBalancer
       Port: 80
       Protocol: HTTP
@@ -589,12 +612,6 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-            - 's3:CreateBucket'
-            - 's3:DeleteBucket'
-            Resource: !GetAtt 'S3Bucket.Arn'
-          - Effect: Allow
-            Action:
-            - 's3:ListBucket'
             - 's3:PutObject'
             - 's3:GetObject'
             - 's3:DeleteObject'
@@ -633,6 +650,20 @@ Resources:
       Path: "/"
       Roles:
       - !Ref WebAppS3IAMRole
+
+  applicationDNS:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneName: dev.shreyaghate.me.
+      RecordSets:
+      - Name: dev.shreyaghate.me.
+        Type: A
+        # TTL: "60"
+        # ResourceRecords:
+        # - "127.0.0.1"
+        AliasTarget:
+          HostedZoneId: !GetAtt loadBalancer.CanonicalHostedZoneID
+          DNSName: !GetAtt loadBalancer.DNSName
 
 Outputs:
   VPC:
