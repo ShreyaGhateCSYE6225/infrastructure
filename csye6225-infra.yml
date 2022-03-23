@@ -110,6 +110,11 @@ Parameters:
     Default: '13.3'
     AllowedValues: ['10.1', '10.3', '10.4', '10.5', '10.6', '10.7', '10.9', '10.10', '10.11', '10.12', '10.13', '10.14', '11.1', '11.2', '11.4', '11.5', '11.6', '11.7', '11.8', '11.9', '12.2', '12.3', '12.4', '12.7', '12.8', '12.9', '13.3']
 
+  MyDomainName:
+    Description: "Domain Name"
+    Type: String
+    Default: "prod.shreyaghate.me."
+
 Resources:
   VPC:
     Type: AWS::EC2::VPC
@@ -279,24 +284,6 @@ Resources:
           Key: Name
           Value: myVPC DB Subnet Group
 
-  ApplicationSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Web Service
-      GroupName: web     
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: !Ref SshPort
-          ToPort: !Ref SshPort
-        - IpProtocol: tcp
-          FromPort: !Ref WebAppPort
-          ToPort: !Ref WebAppPort
-          # SourceSecurityGroupId: !GetAtt LoadBalancerSecurityGroup.GroupId
-      Tags:
-        - Key: Name
-          Value: myVPC EC2 Security Group
-
   DatabaseSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -318,58 +305,32 @@ Resources:
           IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          SourceSecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
-          # CidrIp: !Ref SecurityGroupCidrBlock
+          # SourceSecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
+          CidrIp: !Ref SecurityGroupCidrBlock
         - Description: HTTPS IPv4
           IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          SourceSecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
-          # CidrIp: !Ref SecurityGroupCidrBlock
+          # SourceSecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
+          CidrIp: !Ref SecurityGroupCidrBlock
 
-  # EC2Instance:
-  #   Type: AWS::EC2::Instance
-  #   DependsOn: 
-  #   - RDSDatabaseInstance
-  #   - S3Bucket
-  #   Properties:
-  #     InstanceType: t2.micro
-  #     ImageId: !Ref ImageId
-  #     IamInstanceProfile: !Ref IAMInstanceProfile
-  #     NetworkInterfaces: 
-  #     - AssociatePublicIpAddress: "true"
-  #       DeviceIndex: "0"
-  #       GroupSet: 
-  #       - !Ref ApplicationSecurityGroup
-  #       SubnetId: !Ref  PublicSubnet1
-  #     BlockDeviceMappings:
-  #       - DeviceName: /dev/xvda
-  #         Ebs:
-  #           VolumeType: !Ref VolumeType
-  #           VolumeSize: !Ref VolumeSize
-  #           DeleteOnTermination: !Ref DeleteOnTermination
-  #     Tags:
-  #       - Key: Name
-  #         Value: myVPC EC2 Instance
-  #     UserData:
-  #       Fn::Base64: !Sub |
-  #         #!/bin/bash
-  #         cat > /etc/environment << 'EOF'
-  #           export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}
-  #           export DB_USERNAME=${DBMasterUsername}
-  #           export DB_PASSWORD=${DBMasterUserPassword}
-  #           export DB_NAME=${DBName}
-  #           export S3_BUCKET_NAME=${S3BucketName}
-  #           export AWS_BUCKET_REGION=${S3BucketRegion}
-
-  #         EOF
-  #         source /etc/profile
-  #         cd /home/ec2-user/webservice
-  #         rm -rf node_modules
-  #         sudo npm i
-  #         sudo systemctl enable myapp
-  #         sudo systemctl start myapp
-  #         sudo pm2 reload all --update-env
+  ApplicationSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Web Service
+      GroupName: web     
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref SshPort
+          ToPort: !Ref SshPort
+        - IpProtocol: tcp
+          FromPort: !Ref WebAppPort
+          ToPort: !Ref WebAppPort
+          SourceSecurityGroupId: !GetAtt LoadBalancerSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: myVPC EC2 Security Group
 
   asgLaunchTemplate:
     Type: 'AWS::EC2::LaunchTemplate'
@@ -485,7 +446,7 @@ Resources:
         MetricName: CPUUtilization
         Namespace: AWS/EC2
         Statistic: Average
-        Period: '300'
+        Period: '60'
         EvaluationPeriods: '2'
         Threshold: "5"
         AlarmActions: 
@@ -502,7 +463,7 @@ Resources:
         MetricName: CPUUtilization
         Namespace: AWS/EC2
         Statistic: Average
-        Period: '300'
+        Period: '60'
         EvaluationPeriods: '2'
         Threshold: "3"
         AlarmActions: 
@@ -516,7 +477,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 90
-      HealthCheckPath: '/'
+      HealthCheckPath: '/healthz'
       HealthCheckPort: '8080'
       HealthCheckProtocol: 'HTTP'
       HealthCheckTimeoutSeconds: 60
@@ -654,13 +615,10 @@ Resources:
   applicationDNS:
     Type: AWS::Route53::RecordSetGroup
     Properties:
-      HostedZoneName: dev.shreyaghate.me.
+      HostedZoneName: !Ref MyDomainName
       RecordSets:
-      - Name: dev.shreyaghate.me.
+      - Name: !Ref MyDomainName
         Type: A
-        # TTL: "60"
-        # ResourceRecords:
-        # - "127.0.0.1"
         AliasTarget:
           HostedZoneId: !GetAtt loadBalancer.CanonicalHostedZoneID
           DNSName: !GetAtt loadBalancer.DNSName
