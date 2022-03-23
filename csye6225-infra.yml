@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Deploy a VPC for CSYE 6225 Assignment 3
+Description: CSYE 6225 Assignment 6
 
 Parameters: 
   VpcCidrBlock:
@@ -109,6 +109,11 @@ Parameters:
     Type: String
     Default: '13.3'
     AllowedValues: ['10.1', '10.3', '10.4', '10.5', '10.6', '10.7', '10.9', '10.10', '10.11', '10.12', '10.13', '10.14', '11.1', '11.2', '11.4', '11.5', '11.6', '11.7', '11.8', '11.9', '12.2', '12.3', '12.4', '12.7', '12.8', '12.9', '13.3']
+
+  MyDomainName:
+    Description: "Domain Name"
+    Type: String
+    Default: "prod.shreyaghate.me."
 
 Resources:
   VPC:
@@ -279,33 +284,6 @@ Resources:
           Key: Name
           Value: myVPC DB Subnet Group
 
-  ApplicationSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Web Service
-      GroupName: web     
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: !Ref HTTPPort
-          ToPort: !Ref HTTPPort
-          CidrIp: !Ref SecurityGroupCidrBlock
-        - IpProtocol: tcp
-          FromPort: !Ref SshPort
-          ToPort: !Ref SshPort
-          CidrIp: !Ref SecurityGroupCidrBlock
-        - IpProtocol: tcp
-          FromPort: !Ref HTTPSPort
-          ToPort: !Ref HTTPSPort
-          CidrIp: !Ref SecurityGroupCidrBlock
-        - IpProtocol: tcp
-          FromPort: !Ref WebAppPort
-          ToPort: !Ref WebAppPort
-          CidrIp: !Ref SecurityGroupCidrBlock
-      Tags:
-        - Key: Name
-          Value: myVPC EC2 Security Group
-
   DatabaseSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -317,49 +295,216 @@ Resources:
           ToPort: !Ref RDSPort
           SourceSecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
 
-  EC2Instance:
-    Type: AWS::EC2::Instance
-    DependsOn: 
-    - RDSDatabaseInstance
-    - S3Bucket
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      InstanceType: t2.micro
-      ImageId: !Ref ImageId
-      IamInstanceProfile: !Ref IAMInstanceProfile
-      NetworkInterfaces: 
-      - AssociatePublicIpAddress: "true"
-        DeviceIndex: "0"
-        GroupSet: 
-        - !Ref ApplicationSecurityGroup
-        SubnetId: !Ref  PublicSubnet1
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs:
-            VolumeType: !Ref VolumeType
-            VolumeSize: !Ref VolumeSize
-            DeleteOnTermination: !Ref DeleteOnTermination
+      GroupDescription: Allows HTTP and HTTPS connections 
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - Description: HTTP IPv4
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          # SourceSecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
+          CidrIp: !Ref SecurityGroupCidrBlock
+        - Description: HTTPS IPv4
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          # SourceSecurityGroupId: !GetAtt ApplicationSecurityGroup.GroupId
+          CidrIp: !Ref SecurityGroupCidrBlock
+
+  ApplicationSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Web Service
+      GroupName: web     
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref SshPort
+          ToPort: !Ref SshPort
+        - IpProtocol: tcp
+          FromPort: !Ref WebAppPort
+          ToPort: !Ref WebAppPort
+          SourceSecurityGroupId: !GetAtt LoadBalancerSecurityGroup.GroupId
       Tags:
         - Key: Name
-          Value: myVPC EC2 Instance
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          cat > /etc/environment << 'EOF'
-            export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}
-            export DB_USERNAME=${DBMasterUsername}
-            export DB_PASSWORD=${DBMasterUserPassword}
-            export DB_NAME=${DBName}
-            export S3_BUCKET_NAME=${S3BucketName}
-            export AWS_BUCKET_REGION=${S3BucketRegion}
+          Value: myVPC EC2 Security Group
 
-          EOF
-          source /etc/profile
-          cd /home/ec2-user/webservice
-          rm -rf node_modules
-          sudo npm i
-          sudo systemctl enable myapp
-          sudo systemctl start myapp
-          sudo pm2 reload all --update-env
+  asgLaunchTemplate:
+    Type: 'AWS::EC2::LaunchTemplate'
+    Properties:
+      LaunchTemplateName: 'asg_launch_config'
+      LaunchTemplateData:
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            AssociatePublicIpAddress: true
+            Groups:
+              - !Ref ApplicationSecurityGroup
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeType: !Ref VolumeType
+              VolumeSize: !Ref VolumeSize
+              DeleteOnTermination: !Ref DeleteOnTermination
+        ImageId: !Ref ImageId
+        InstanceType: t2.micro
+        IamInstanceProfile: 
+            Name: !Ref IAMInstanceProfile
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            cat > /etc/environment << 'EOF'
+              export DB_CONNECTION=${RDSDatabaseInstance.Endpoint.Address}
+              export DB_USERNAME=${DBMasterUsername}
+              export DB_PASSWORD=${DBMasterUserPassword}
+              export DB_NAME=${DBName}
+              export S3_BUCKET_NAME=${S3BucketName}
+              export AWS_BUCKET_REGION=${S3BucketRegion}
+
+            EOF
+            source /etc/profile
+            cd /home/ec2-user/webservice
+            rm -rf node_modules
+            sudo npm i
+            sudo systemctl enable myapp
+            sudo systemctl start myapp
+            sudo pm2 reload all --update-env
+
+  asgWebApp:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub ${AWS::StackName}-asg
+      AvailabilityZones:
+        - us-east-1a
+        - us-east-1b
+        - us-east-1c
+      Cooldown: '60'
+      DesiredCapacity: '3'
+      LaunchTemplate:
+        LaunchTemplateId: !Ref asgLaunchTemplate
+        Version: !GetAtt asgLaunchTemplate.LatestVersionNumber
+      MaxSize: '5'
+      MinSize: '3'
+      Tags:
+        - Key: Application
+          Value: WebApp
+          PropagateAtLaunch: "true"
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-asg
+          PropagateAtLaunch: "true"
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+        - !Ref PublicSubnet3
+      TargetGroupARNs:
+      - !Ref TargetGroup
+
+  loadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      Name: !Sub ${AWS::StackName}-load-balancer
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+        - !Ref PublicSubnet3
+      Tags:
+        - Key: Application
+          Value: WebApp
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-load-balancer
+      Type: application
+
+  asgScalingUpPolicy: 
+      Type: AWS::AutoScaling::ScalingPolicy
+      Properties: 
+        AdjustmentType: "ChangeInCapacity"
+        Cooldown: "60"
+        AutoScalingGroupName: !Ref asgWebApp
+        ScalingAdjustment: 1
+
+  asgScalingDownPolicy: 
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties: 
+      AdjustmentType: "ChangeInCapacity"
+      Cooldown: "60"
+      AutoScalingGroupName: !Ref asgWebApp
+      ScalingAdjustment: -1
+
+  CPUAlarmHigh: 
+    Type: AWS::CloudWatch::Alarm
+    Properties: 
+        AlarmDescription: Scale-up if CPU > 5%
+        MetricName: CPUUtilization
+        Namespace: AWS/EC2
+        Statistic: Average
+        Period: '60'
+        EvaluationPeriods: '2'
+        Threshold: "5"
+        AlarmActions: 
+        - !Ref asgScalingUpPolicy
+        Dimensions: 
+        - Name: AutoScalingGroupName
+          Value: !Ref asgWebApp
+        ComparisonOperator: "GreaterThanThreshold"
+
+  CPUAlarmLow: 
+     Type: AWS::CloudWatch::Alarm
+     Properties: 
+        AlarmDescription: Scale-down if CPU < 3%
+        MetricName: CPUUtilization
+        Namespace: AWS/EC2
+        Statistic: Average
+        Period: '60'
+        EvaluationPeriods: '2'
+        Threshold: "3"
+        AlarmActions: 
+        - !Ref asgScalingDownPolicy
+        Dimensions: 
+        - Name: AutoScalingGroupName
+          Value: !Ref asgWebApp
+        ComparisonOperator: "LessThanThreshold"
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 90
+      HealthCheckPath: '/healthz'
+      HealthCheckPort: '8080'
+      HealthCheckProtocol: 'HTTP'
+      HealthCheckTimeoutSeconds: 60
+      HealthyThresholdCount: 2
+      IpAddressType: ipv4
+      Name: !Sub ${AWS::StackName}-lb-tg
+      Port: 8080
+      Protocol: 'HTTP'
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-lb-tg
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '20'
+      TargetType: instance
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref VPC
+
+  loadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref loadBalancer
+      Port: 80
+      Protocol: HTTP
 
   S3Bucket:
     Type: 'AWS::S3::Bucket'
@@ -428,12 +573,6 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-            - 's3:CreateBucket'
-            - 's3:DeleteBucket'
-            Resource: !GetAtt 'S3Bucket.Arn'
-          - Effect: Allow
-            Action:
-            - 's3:ListBucket'
             - 's3:PutObject'
             - 's3:GetObject'
             - 's3:DeleteObject'
@@ -472,6 +611,17 @@ Resources:
       Path: "/"
       Roles:
       - !Ref WebAppS3IAMRole
+
+  applicationDNS:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneName: !Ref MyDomainName
+      RecordSets:
+      - Name: !Ref MyDomainName
+        Type: A
+        AliasTarget:
+          HostedZoneId: !GetAtt loadBalancer.CanonicalHostedZoneID
+          DNSName: !GetAtt loadBalancer.DNSName
 
 Outputs:
   VPC:
