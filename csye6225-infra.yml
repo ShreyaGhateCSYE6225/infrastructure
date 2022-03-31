@@ -324,7 +324,6 @@ Resources:
         - IpProtocol: tcp
           FromPort: !Ref SshPort
           ToPort: !Ref SshPort
-          CidrIp: !Ref SecurityGroupCidrBlock #REMOVE
         - IpProtocol: tcp
           FromPort: !Ref WebAppPort
           ToPort: !Ref WebAppPort
@@ -382,12 +381,12 @@ Resources:
         - us-east-1b
         - us-east-1c
       Cooldown: '60'
-      DesiredCapacity: '3'
+      DesiredCapacity: '2'
       LaunchTemplate:
         LaunchTemplateId: !Ref asgLaunchTemplate
         Version: !GetAtt asgLaunchTemplate.LatestVersionNumber
-      MaxSize: '5'
-      MinSize: '3'
+      MaxSize: '3'
+      MinSize: '1'
       Tags:
         - Key: Application
           Value: WebApp
