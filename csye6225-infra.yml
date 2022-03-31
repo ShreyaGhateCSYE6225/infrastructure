@@ -324,6 +324,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: !Ref SshPort
           ToPort: !Ref SshPort
+          CidrIp: !Ref SecurityGroupCidrBlock #REMOVE
         - IpProtocol: tcp
           FromPort: !Ref WebAppPort
           ToPort: !Ref WebAppPort
@@ -403,6 +404,8 @@ Resources:
 
   loadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn:
+    - AttachGateway
     Properties:
       IpAddressType: ipv4
       LoadBalancerAttributes:
@@ -578,8 +581,118 @@ Resources:
             - 's3:DeleteObject'
             Resource: !Join ['', [!GetAtt 'S3Bucket.Arn','/*' ]]
       Roles:
-      - !Ref WebAppS3IAMRole
+      - !Ref CodeDeployEC2ServiceRole
 
+  # CodeDeployEC2S3:
+  #   Type: AWS::IAM::Policy
+  #   Properties:
+  #     PolicyName: CodeDeployEC2S3
+  #     PolicyDocument:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - Effect: Allow
+  #           Action:
+  #           - 's3:PutObject'
+  #           - 's3:GetObject'
+  #           - 's3:DeleteObject'
+  #           Resource: 
+  #           - arn:aws:s3:::codedeploy.shreyaghate.me/*
+  #           - arn:aws:s3:::aws-codedeploy-us-east-1/*
+  #     Roles:
+  #     - !Ref CodeDeployEC2ServiceRole
+  #     Users: 
+  #     - ghactions-app
+
+  GHUploadToS3:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: GHUploadToS3
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+            - 's3:PutObject'
+            - 's3:GetObject'
+            - 's3:DeleteObject'
+            Resource: !Join ['', [!GetAtt 'S3Bucket.Arn','/*' ]]
+      # Roles:
+      # - !Ref CodeDeployEC2ServiceRole
+      Users: 
+      - ghactions-app
+  
+  GHCodeDeploy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: GHCodeDeploy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+            - codedeploy:RegisterApplicationRevision
+            - codedeploy:GetApplicationRevision
+            Resource: 
+            - "arn:aws:codedeploy:us-east-1:282741675015:application:csye6225-webapp"
+          - Effect: Allow
+            Action:
+            - codedeploy:GetDeploymentConfig
+            Resource: "*"
+          - Effect: Allow
+            Action:
+            - codedeploy:CreateDeployment
+            - codedeploy:GetDeployment
+            Resource: 
+            - arn:aws:codedeploy:us-east-1:282741675015:deploymentconfig:CodeDeployDefault.OneAtATime
+            - arn:aws:codedeploy:us-east-1:282741675015:deploymentconfig:CodeDeployDefault.HalfAtATime
+            - arn:aws:codedeploy:us-east-1:282741675015:deploymentconfig:CodeDeployDefault.AllAtOnce
+      # Roles:
+      # - !Ref CodeDeployEC2ServiceRole
+      Users: 
+      - ghactions-app
+  
+  GHEC2AMI:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: GHEC2AMI
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+            - ec2:CreateSnapshot
+            - ec2:CreateTags
+            - ec2:CreateVolume
+            - ec2:DeleteKeyPair
+            - ec2:DeleteSecurityGroup
+            - ec2:DeleteSnapshot
+            - ec2:DeleteVolume
+            - ec2:DeregisterImage
+            - ec2:DescribeImageAttribute
+            - ec2:DescribeImages
+            - ec2:DescribeInstances
+            - ec2:DescribeInstanceStatus
+            - ec2:DescribeRegions
+            - ec2:DescribeSecurityGroups
+            - ec2:DescribeSnapshots
+            - ec2:DescribeSubnets
+            - ec2:DescribeTags
+            - ec2:DescribeVolumes
+            - ec2:DetachVolume
+            - ec2:GetPasswordData
+            - ec2:ModifyImageAttribute
+            - ec2:ModifyInstanceAttribute
+            - ec2:ModifySnapshotAttribute
+            - ec2:RegisterImage
+            - ec2:RunInstances
+            - ec2:StopInstances
+            - ec2:TerminateInstances
+            Resource: "*"
+      Roles:
+      - !Ref CodeDeployEC2ServiceRole
+      Users: 
+      - ghactions-app
+    
   WebAppS3IAMRole:
     Type: AWS::IAM::Role
     Properties:
@@ -603,6 +716,70 @@ Resources:
                 Action: s3:ListBucket
                 Resource: !Join ['', [!GetAtt 'S3Bucket.Arn']]
       Path: /
+      # Users: 
+      # - ghactions-app
+
+  CodeDeployEC2ServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CodeDeployEC2ServiceRole
+      Description: IAM Role for EC2 instances to call web application
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: CodeDeployEC2S3
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                - 's3:PutObject'
+                - 's3:GetObject'
+                - 's3:DeleteObject'
+                - 's3:Get*'
+                - 's3:List*'
+                Resource: 
+                - arn:aws:s3:::codedeploy.shreyaghate.me/*
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: 
+                - !Join ['', [!GetAtt 'S3Bucket.Arn']]
+                - arn:aws:s3:::codedeploy.shreyaghate.me/*
+                # - arn:aws:s3:::aws-codedeploy-us-east-1/*
+      Path: /
+      # ManagedPolicyArns:
+      #   - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforCodeDeployRole
+      # Users: 
+      # - ghactions-app
+  
+  CodeDeployServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CodeDeployServiceRole
+      Description: IAM Role for Code Deploy to access AWS services as Autoscaling group
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codedeploy.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      # Policies:
+      #   - PolicyName: AWSCodeDeployRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+      Path: /
+      # Users: 
+      # - ghactions-app
 
   IAMInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -610,7 +787,7 @@ Resources:
       InstanceProfileName: IAMInstanceProfile
       Path: "/"
       Roles:
-      - !Ref WebAppS3IAMRole
+      - !Ref CodeDeployEC2ServiceRole
 
   applicationDNS:
     Type: AWS::Route53::RecordSetGroup
@@ -622,6 +799,44 @@ Resources:
         AliasTarget:
           HostedZoneId: !GetAtt loadBalancer.CanonicalHostedZoneID
           DNSName: !GetAtt loadBalancer.DNSName
+
+  CodeDeployApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties: 
+      ApplicationName: 'csye6225-webapp'
+      # ComputePlatform: 'EC2/On-premises'
+      ComputePlatform: 'Server'
+
+  
+  CodeDeployDeploymentGroup:
+    Type: AWS::CodeDeploy::DeploymentGroup
+    DependsOn:
+      - asgWebApp
+    Properties: 
+      ApplicationName: 'csye6225-webapp'
+      DeploymentGroupName: 'csye6225-webapp-deployment'
+      # ServiceRoleArn: 'arn:aws:iam::282741675015:role/CodeDeployServiceRole'
+      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
+      AutoScalingGroups:
+      - !Sub ${AWS::StackName}-asg
+      DeploymentStyle: 
+          DeploymentType: 'IN_PLACE'
+          DeploymentOption: 'WITHOUT_TRAFFIC_CONTROL'
+      Ec2TagSet:
+        Ec2TagSetList:
+        - Ec2TagGroup:
+          - Key: Application
+            Value: WebApp
+            Type: KEY_AND_VALUE    
+      # Ec2TagFilters:
+      #   - Key: 'Name'
+      #     Value: 'Deployment Group'
+      #     Type: KEY_AND_VALUE
+      DeploymentConfigName: 'CodeDeployDefault.AllAtOnce'
+      AutoRollbackConfiguration:
+        Enabled: 'true'
+        Events:
+          - DEPLOYMENT_FAILURE
 
 Outputs:
   VPC:
