@@ -21,4 +21,3 @@ aws cloudformation update-stack --profile demo --region us-east-1 --stack-name d
 # Delete Stack
 aws cloudformation delete-stack --profile demo --region us-east-1 --stack-name devdemo                                   
 ```
-
