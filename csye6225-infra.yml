@@ -324,6 +324,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: !Ref SshPort
           ToPort: !Ref SshPort
+          CidrIp: !Ref SecurityGroupCidrBlock
         - IpProtocol: tcp
           FromPort: !Ref WebAppPort
           ToPort: !Ref WebAppPort
@@ -582,6 +583,32 @@ Resources:
       Roles:
       - !Ref CodeDeployEC2ServiceRole
 
+  # CloudWatchAgentServerPolicy:
+  #   Type: AWS::IAM::Policy
+  #   Properties:
+  #     PolicyName: "CloudWatchAgentServerPolicy"
+  #     PolicyDocument:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - Effect: Allow
+  #           Action:
+  #             - 'cloudwatch:PutMetricData'
+  #             - 'ec2:DescribeVolumes'
+  #             - 'ec2:DescribeTags'
+  #             - 'logs:PutLogEvents'
+  #             - 'logs:DescribeLogStreams'
+  #             - 'logs:DescribeLogGroups'
+  #             - 'logs:CreateLogStream'
+  #             - 'logs:CreateLogGroup'
+  #           Resource: "*"
+  #         - Effect: Allow
+  #           Action:
+  #             - 'ssm:GetParameter'
+  #             - 'ssm:PutParameter'
+  #           Resource: "arn:aws:ssm:*:*:parameter/AmazonCloudWatch-*"
+      # Roles:
+      #   - !Ref CodeDeployEC2ServiceRole
+
   # CodeDeployEC2S3:
   #   Type: AWS::IAM::Policy
   #   Properties:
@@ -752,11 +779,29 @@ Resources:
                 - !Join ['', [!GetAtt 'S3Bucket.Arn']]
                 - arn:aws:s3:::codedeploy.shreyaghate.me/*
                 # - arn:aws:s3:::aws-codedeploy-us-east-1/*
+        # - PolicyName: "CloudWatchAgentServerPolicy"
+        #   PolicyDocument:
+        #     Version: "2012-10-17"
+        #     Statement:
+        #       - Effect: Allow
+        #         Action:
+        #           - 'cloudwatch:PutMetricData'
+        #           - 'ec2:DescribeVolumes'
+        #           - 'ec2:DescribeTags'
+        #           - 'logs:PutLogEvents'
+        #           - 'logs:DescribeLogStreams'
+        #           - 'logs:DescribeLogGroups'
+        #           - 'logs:CreateLogStream'
+        #           - 'logs:CreateLogGroup'
+        #         Resource: "*"
+        #       - Effect: Allow
+        #         Action:
+        #           - 'ssm:GetParameter'
+        #           - 'ssm:PutParameter'
+        #         Resource: "arn:aws:ssm:*:*:parameter/AmazonCloudWatch-*"
       Path: /
-      # ManagedPolicyArns:
-      #   - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforCodeDeployRole
-      # Users: 
-      # - ghactions-app
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/CloudWatchAgentAdminPolicy"
   
   CodeDeployServiceRole:
     Type: AWS::IAM::Role
