@@ -324,7 +324,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: !Ref SshPort
           ToPort: !Ref SshPort
-          CidrIp: !Ref SecurityGroupCidrBlock
+          # CidrIp: !Ref SecurityGroupCidrBlock
         - IpProtocol: tcp
           FromPort: !Ref WebAppPort
           ToPort: !Ref WebAppPort
