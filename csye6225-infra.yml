@@ -583,52 +583,6 @@ Resources:
       Roles:
       - !Ref CodeDeployEC2ServiceRole
 
-  # CloudWatchAgentServerPolicy:
-  #   Type: AWS::IAM::Policy
-  #   Properties:
-  #     PolicyName: "CloudWatchAgentServerPolicy"
-  #     PolicyDocument:
-  #       Version: "2012-10-17"
-  #       Statement:
-  #         - Effect: Allow
-  #           Action:
-  #             - 'cloudwatch:PutMetricData'
-  #             - 'ec2:DescribeVolumes'
-  #             - 'ec2:DescribeTags'
-  #             - 'logs:PutLogEvents'
-  #             - 'logs:DescribeLogStreams'
-  #             - 'logs:DescribeLogGroups'
-  #             - 'logs:CreateLogStream'
-  #             - 'logs:CreateLogGroup'
-  #           Resource: "*"
-  #         - Effect: Allow
-  #           Action:
-  #             - 'ssm:GetParameter'
-  #             - 'ssm:PutParameter'
-  #           Resource: "arn:aws:ssm:*:*:parameter/AmazonCloudWatch-*"
-      # Roles:
-      #   - !Ref CodeDeployEC2ServiceRole
-
-  # CodeDeployEC2S3:
-  #   Type: AWS::IAM::Policy
-  #   Properties:
-  #     PolicyName: CodeDeployEC2S3
-  #     PolicyDocument:
-  #       Version: "2012-10-17"
-  #       Statement:
-  #         - Effect: Allow
-  #           Action:
-  #           - 's3:PutObject'
-  #           - 's3:GetObject'
-  #           - 's3:DeleteObject'
-  #           Resource: 
-  #           - arn:aws:s3:::codedeploy.shreyaghate.me/*
-  #           - arn:aws:s3:::aws-codedeploy-us-east-1/*
-  #     Roles:
-  #     - !Ref CodeDeployEC2ServiceRole
-  #     Users: 
-  #     - ghactions-app
-
   GHUploadToS3:
     Type: AWS::IAM::Policy
     Properties:
