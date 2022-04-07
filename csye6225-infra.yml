@@ -755,7 +755,7 @@ Resources:
         #         Resource: "arn:aws:ssm:*:*:parameter/AmazonCloudWatch-*"
       Path: /
       ManagedPolicyArns:
-      - "arn:aws:iam::aws:policy/CloudWatchAgentAdminPolicy"
+      - "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
   
   CodeDeployServiceRole:
     Type: AWS::IAM::Role
@@ -771,13 +771,10 @@ Resources:
                 - codedeploy.amazonaws.com
             Action:
               - 'sts:AssumeRole'
-      # Policies:
-      #   - PolicyName: AWSCodeDeployRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
       Path: /
-      # Users: 
-      # - ghactions-app
+
 
   IAMInstanceProfile:
     Type: AWS::IAM::InstanceProfile
