@@ -756,6 +756,7 @@ Resources:
       Path: /
       ManagedPolicyArns:
       - "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+      - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
   
   CodeDeployServiceRole:
     Type: AWS::IAM::Role
@@ -832,6 +833,106 @@ Resources:
         Enabled: 'true'
         Events:
           - DEPLOYMENT_FAILURE
+
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Sub 'assignment-sns-topic'
+      TopicName: !Sub 'assignment-sns-topic'
+      Subscription:
+        - Protocol: lambda
+          Endpoint: !GetAtt LambdaFunction.Arn
+  
+  LambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      # CodeUri: ./
+      Handler: index.handler
+      Runtime: nodejs8.10
+      FunctionName: mylambda
+      Description: mylambda 
+      MemorySize: 512
+      Timeout: 60
+      # Role: !Ref LambdaExecutionRoleArn
+
+  LambdaExpressFunctionAlias:
+      Type: AWS::Lambda::Alias
+      Properties:
+        FunctionName: !Ref LambdaFunction
+        FunctionVersion: '$LATEST'
+        Name: live
+
+  LambdaFunctionInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref LambdaFunction
+      Principal: sns.amazonaws.com   
+      SourceArn:  !Ref SNSTopic 
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      # Policies:
+      # - PolicyName: root
+      #   PolicyDocument:
+      #     Version: '2012-10-17'
+      #     Statement:
+      #     - Effect: Allow
+      #       Action:
+      #       - logs:*
+      #       Resource: arn:aws:logs:*:*:*
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/AmazonSESFullAccess"
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      - "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+
+  SNSTopicPolicy:
+    Type: 'AWS::SNS::TopicPolicy'
+    Properties:
+      Topics:
+        - !Ref SNSTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # - Effect: Allow
+          #   Action: 'sns:Publish'
+          #   Resource: !Ref SNSTopic
+          #   Principal:
+          #     AWS: '*'
+          #   Condition:
+          #     ArnLike:
+          #       AWS:SourceArn: !Sub 'arn:aws:*:*:${AWS::AccountId}:*'
+          - Sid: AllowServices
+            Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+                - cloudwatch.amazonaws.com
+            Action: 'sns:Publish'
+            Resource:
+              - !Ref SNSTopic
+          - Sid: AllowAWS
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: 'sns:Publish'
+            Resource:
+              - !Ref SNSTopic
+      Topics:
+        - !Ref SNSTopic
+      Roles:
+      - !Ref CodeDeployEC2ServiceRole
 
 Outputs:
   VPC:
