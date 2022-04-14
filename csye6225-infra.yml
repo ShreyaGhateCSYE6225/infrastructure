@@ -1,5 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: CSYE 6225 Assignment 6
+Transform: AWS::Serverless-2016-10-31
 
 Parameters: 
   VpcCidrBlock:
@@ -324,7 +325,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: !Ref SshPort
           ToPort: !Ref SshPort
-          # CidrIp: !Ref SecurityGroupCidrBlock
+          CidrIp: !Ref SecurityGroupCidrBlock
         - IpProtocol: tcp
           FromPort: !Ref WebAppPort
           ToPort: !Ref WebAppPort
@@ -756,6 +757,7 @@ Resources:
       Path: /
       ManagedPolicyArns:
       - "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+      - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
   
   CodeDeployServiceRole:
     Type: AWS::IAM::Role
@@ -832,6 +834,187 @@ Resources:
         Enabled: 'true'
         Events:
           - DEPLOYMENT_FAILURE
+
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: 'assignment-sns-topic'
+      TopicName: 'assignment-sns-topic'
+      Subscription:
+        - Protocol: lambda
+          Endpoint: !GetAtt LambdaFunction.Arn
+  
+  # LambdaFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: '/Users/shreya.ghate/Desktop/serverless/handler.zip'
+  #     Handler: "handler.SesSendEmail"
+  #     Runtime: nodejs14.0
+  #     FunctionName: mylambda
+  #     Description: mylambda 
+  #     MemorySize: 512
+  #     Timeout: 60
+  #     # Role: !Ref LambdaExecutionRoleArn
+  
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: '/Users/shreya.ghate/Desktop/serverless/handler.zip'
+      Handler: "handler.SesSendEmail"
+      Runtime: nodejs14.x
+      FunctionName: mylambda
+      Description: mylambda 
+      MemorySize: 512
+      Timeout: 60
+      Role: !GetAtt LambdaExecutionRole.Arn
+
+  LambdaExpressFunctionAlias:
+    Type: AWS::Lambda::Alias
+    Properties:
+      FunctionName: !Ref LambdaFunction
+      FunctionVersion: '$LATEST'
+      Name: live
+
+  LambdaFunctionInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref LambdaFunction
+      Principal: sns.amazonaws.com   
+      SourceArn:  !Ref SNSTopic 
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: Lambdapolicy
+        PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+            -   Effect: Allow
+                Action: 
+                -   ses:SendEmail
+                -   ses:SendRawEmail
+                -   sns:Publish
+                -   "dynamodb:*"
+                Resource: "*"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/AWSLambdaExecute"
+      - "arn:aws:iam::aws:policy/AmazonSESFullAccess"
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      - "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+
+  SNSTopicPolicy:
+    DependsOn: 
+        - SNSTopic
+    Type: 'AWS::SNS::TopicPolicy'
+    Properties:
+      Topics:
+        - !Ref SNSTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # - Effect: Allow
+          #   Action: 'sns:Publish'
+          #   Resource: !Ref SNSTopic
+          #   Principal:
+          #     AWS: '*'
+          #   Condition:
+          #     ArnLike:
+          #       AWS:SourceArn: !Sub 'arn:aws:*:*:${AWS::AccountId}:*'
+          - Sid: AllowServices
+            Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+                - cloudwatch.amazonaws.com
+            Action: 'sns:Publish'
+            Resource:
+              - !Ref SNSTopic
+          - Sid: AllowAWS
+            Effect: Allow
+            Principal:
+              # AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+              AWS: '*'
+            Action: 'sns:Publish'
+            Resource:
+              - !Ref SNSTopic
+      Topics:
+        - !Ref SNSTopic
+      # Roles:
+      # - !Ref CodeDeployEC2ServiceRole
+
+  Queue:
+    Type: AWS::SQS::Queue
+    Properties:
+        QueueName: SQSService
+
+  ServerLessApplication:
+    Type: AWS::CodeDeploy::Application
+    Properties:
+        ApplicationName: ServerLessApplication
+        ComputePlatform:  Lambda 
+
+  ServerLessApplicationDeploymentGroup:
+    DependsOn: 
+    - ServerLessApplication
+    - LambdaCodeDeployServiceRole
+    Type: AWS::CodeDeploy::DeploymentGroup
+    Properties:
+        ApplicationName: !Ref ServerLessApplication
+        DeploymentGroupName: ServerLessApplicationDeploymentGroup
+        ServiceRoleArn: 
+            !GetAtt LambdaCodeDeployServiceRole.Arn
+        DeploymentStyle:
+            DeploymentOption: WITH_TRAFFIC_CONTROL 
+            DeploymentType: BLUE_GREEN 
+
+  LambdaCodeDeployServiceRole: 
+    Type: AWS::IAM::Role
+    Properties: 
+        RoleName: LambdaCodeDeployServiceRole
+        ManagedPolicyArns: 
+        -   arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole
+        AssumeRolePolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+            -   Effect: Allow
+                Sid: ""
+                Principal: 
+                    Service: 
+                    - codedeploy.amazonaws.com 
+                    - lambda.amazonaws.com
+                Action: 
+                - 'sts:AssumeRole'
+
+  myDynamoDBTable: 
+    Type: AWS::DynamoDB::Table
+    Properties: 
+        # BillingMode: PAY_PER_REQUEST 
+        AttributeDefinitions: 
+        - AttributeName: id
+          AttributeType: S
+        KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+        ProvisionedThroughput: 
+          ReadCapacityUnits: "5"
+          WriteCapacityUnits: "5"
+        TableName: myDynamoDBTable
+        TimeToLiveSpecification:
+            AttributeName: TimeToLive
+            Enabled: true
 
 Outputs:
   VPC:
