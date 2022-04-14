@@ -325,7 +325,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: !Ref SshPort
           ToPort: !Ref SshPort
-          # CidrIp: !Ref SecurityGroupCidrBlock
+          CidrIp: !Ref SecurityGroupCidrBlock
         - IpProtocol: tcp
           FromPort: !Ref WebAppPort
           ToPort: !Ref WebAppPort
@@ -1003,15 +1003,15 @@ Resources:
     Properties: 
         # BillingMode: PAY_PER_REQUEST 
         AttributeDefinitions: 
-        - AttributeName: Email
+        - AttributeName: id
           AttributeType: S
         KeySchema:
-        - AttributeName: Email
+        - AttributeName: id
           KeyType: HASH
         ProvisionedThroughput: 
           ReadCapacityUnits: "5"
           WriteCapacityUnits: "5"
-        TableName: EmailAPI
+        TableName: myDynamoDBTable
         TimeToLiveSpecification:
             AttributeName: TimeToLive
             Enabled: true
