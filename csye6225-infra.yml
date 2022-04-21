@@ -119,7 +119,7 @@ Parameters:
   CertificateARN:
     Description: "SSL Certificate ARN for prod subdomain"
     Type: String
-    Default: "arn:aws:acm:us-east-1:282741675015:certificate/6126e64c-1019-439b-a544-1988547d5ad2"
+    Default: "arn:aws:acm:us-east-1:282741675015:certificate/4efafa9d-51c4-4386-b9ba-7a49c486ec01"
 
 Resources:
   VPC:
@@ -366,15 +366,11 @@ Resources:
               - kms:ListGrants
               - kms:RevokeGrant
             Resource: '*'
-#            Condition:
-#                      Bool:
-#                          "kms:GrantIsForAWSResource": true
           - Sid: Allow use of the key by the root user for autoscaling purposes, service-linked role
             Effect: Allow
             Principal:
               AWS:
                 - !Sub 'arn:aws:iam::282741675015:root'
-#                - 'arn:aws:iam::aws:policy/aws-service-role/AutoScalingServiceRolePolicy'
                 - !Sub "arn:aws:iam::282741675015:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
                 - !GetAtt CodeDeployEC2ServiceRole.Arn
             Action:
@@ -385,10 +381,6 @@ Resources:
               - kms:ReEncrypt*
               - kms:GenerateDataKey*
             Resource: '*'
-#            Condition:
-#              StringEquals:
-#                'kms:ViaService': !Sub 'ec2.${AWS::Region}.amazonaws.com'
-#                'aws:userid': !Ref AWS::AccountId
           - Sid: Allow administration of the key
             Effect: Allow
             Principal:
