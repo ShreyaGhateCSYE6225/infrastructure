@@ -116,6 +116,11 @@ Parameters:
     Type: String
     Default: "prod.shreyaghate.me."
 
+  CertificateARN:
+    Description: "SSL Certificate ARN for prod subdomain"
+    Type: String
+    Default: "arn:aws:acm:us-east-1:282741675015:certificate/6126e64c-1019-439b-a544-1988547d5ad2"
+
 Resources:
   VPC:
     Type: AWS::EC2::VPC
@@ -334,6 +339,90 @@ Resources:
         - Key: Name
           Value: myVPC EC2 Security Group
 
+  EBSAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/ebs
+      TargetKeyId:
+        Ref: EBSKey
+
+  EBSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Encryption key for EBS
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: key-ebs
+        Statement:
+          - Sid: Allow use of the key by the instance
+            Effect: Allow
+            Principal:
+              AWS:
+                - !GetAtt CodeDeployEC2ServiceRole.Arn
+                - !Sub "arn:aws:iam::282741675015:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+                - !Sub "arn:aws:iam::282741675015:root"
+            Action:
+              - kms:CreateGrant
+              - kms:ListGrants
+              - kms:RevokeGrant
+            Resource: '*'
+#            Condition:
+#                      Bool:
+#                          "kms:GrantIsForAWSResource": true
+          - Sid: Allow use of the key by the root user for autoscaling purposes, service-linked role
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Sub 'arn:aws:iam::282741675015:root'
+#                - 'arn:aws:iam::aws:policy/aws-service-role/AutoScalingServiceRolePolicy'
+                - !Sub "arn:aws:iam::282741675015:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+                - !GetAtt CodeDeployEC2ServiceRole.Arn
+            Action:
+              - kms:CreateGrant
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:Encrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+            Resource: '*'
+#            Condition:
+#              StringEquals:
+#                'kms:ViaService': !Sub 'ec2.${AWS::Region}.amazonaws.com'
+#                'aws:userid': !Ref AWS::AccountId
+          - Sid: Allow administration of the key
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Sub 'arn:aws:iam::282741675015:root'
+                - !Sub "arn:aws:iam::282741675015:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+                - !GetAtt CodeDeployEC2ServiceRole.Arn
+            Action:
+              - kms:Create*
+              - kms:Describe*
+              - kms:Enable*
+              - kms:List*
+              - kms:Put*
+              - kms:Update*
+              - kms:Revoke*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+              - kms:Encrypt
+              - kms:ReplicateKey
+            Resource: '*'
+          - Sid: Allow administration of the key
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Sub 'arn:aws:iam::282741675015:root'
+                - !Sub "arn:aws:iam::282741675015:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+                - !GetAtt CodeDeployEC2ServiceRole.Arn
+            Action:
+              - kms:*
+            Resource: '*'
+
   asgLaunchTemplate:
     Type: 'AWS::EC2::LaunchTemplate'
     Properties:
@@ -350,6 +439,8 @@ Resources:
               VolumeType: !Ref VolumeType
               VolumeSize: !Ref VolumeSize
               DeleteOnTermination: !Ref DeleteOnTermination
+              Encrypted: true
+              KmsKeyId: !Sub ${EBSKey.Arn}
         ImageId: !Ref ImageId
         InstanceType: t2.micro
         IamInstanceProfile: 
@@ -507,8 +598,10 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref TargetGroup
       LoadBalancerArn: !Ref loadBalancer
-      Port: 80
-      Protocol: HTTP
+      Port: 443
+      Protocol: HTTPS
+      Certificates: 
+      - CertificateARN: !Ref CertificateARN
 
   S3Bucket:
     Type: 'AWS::S3::Bucket'
@@ -534,12 +627,38 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+  RDSKey:
+      Type: AWS::KMS::Key
+      Properties:
+        KeyPolicy:
+          Version: 2012-10-17
+          Id: key-rds
+          Statement:
+            - Sid: Enable IAM User Permissions
+              Effect: Allow
+              Principal:
+                AWS: !Join
+                  - ''
+                  - - 'arn:aws:iam::'
+                    - 282741675015
+                    - ':root'
+              Action: 'kms:*'
+              Resource: '*'
+
+  RDSAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/rds
+      TargetKeyId:
+        Ref: RDSKey
 
   RDSParameterGroup:
     Type: AWS::RDS::DBParameterGroup
     Properties: 
       Description: CloudFormation Sample PostgreSQL Parameter Group
       Family: !Ref RDSParameterGroupFamily
+      # Parameters:
+      #   rds.force_ssl: 1
       Tags:
       - Key: Name
         Value: myVPC RDS Instance
@@ -560,10 +679,13 @@ Resources:
       MasterUsername: !Ref DBMasterUsername
       MasterUserPassword: !Ref DBMasterUserPassword
       DBName: 'csye6225'
+      DBInstanceIdentifier: csye6225-1
       PubliclyAccessible: false 
       Port: !Ref RDSPort
       VPCSecurityGroups: 
         - !GetAtt DatabaseSecurityGroup.GroupId
+      KmsKeyId: !Ref RDSKey
+      StorageEncrypted: true
       Tags:
         - Key: Name
           Value: myVPC RDS Instance
@@ -897,23 +1019,25 @@ Resources:
           Action:
           - sts:AssumeRole
       Path: "/"
-      Policies:
-      - PolicyName: Lambdapolicy
-        PolicyDocument: 
-            Version: '2012-10-17'
-            Statement: 
-            -   Effect: Allow
-                Action: 
-                -   ses:SendEmail
-                -   ses:SendRawEmail
-                -   sns:Publish
-                -   "dynamodb:*"
-                Resource: "*"
+      # Policies:
+      # - PolicyName: Lambdapolicy
+      #   PolicyDocument: 
+      #       Version: '2012-10-17'
+      #       Statement: 
+      #       -   Effect: Allow
+      #           Action: 
+      #           -   ses:SendEmail
+      #           -   ses:SendRawEmail
+      #           -   sns:Publish
+      #           -   "dynamodb:*"
+      #           Resource: "*"
       ManagedPolicyArns:
       - "arn:aws:iam::aws:policy/AWSLambdaExecute"
       - "arn:aws:iam::aws:policy/AmazonSESFullAccess"
       - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
       - "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+      - "arn:aws:iam::aws:policy/AmazonSNSFullAccess"
+
 
   SNSTopicPolicy:
     DependsOn: 
@@ -932,7 +1056,7 @@ Resources:
           #     AWS: '*'
           #   Condition:
           #     ArnLike:
-          #       AWS:SourceArn: !Sub 'arn:aws:*:*:${AWS::AccountId}:*'
+          #       AWS:SourceArn: !Sub 'arn:aws:*:*:282741675015:*'
           - Sid: AllowServices
             Effect: Allow
             Principal:
@@ -945,7 +1069,7 @@ Resources:
           - Sid: AllowAWS
             Effect: Allow
             Principal:
-              # AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+              # AWS: !Sub "arn:aws:iam::282741675015:root"
               AWS: '*'
             Action: 'sns:Publish'
             Resource:
