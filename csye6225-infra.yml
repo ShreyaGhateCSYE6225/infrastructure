@@ -350,6 +350,7 @@ Resources:
     Type: AWS::KMS::Key
     Properties:
       Description: Encryption key for EBS
+      PendingWindowInDays: 7
       KeyPolicy:
         Version: 2012-10-17
         Id: key-ebs
@@ -593,7 +594,7 @@ Resources:
       Port: 443
       Protocol: HTTPS
       Certificates: 
-      - CertificateARN: !Ref CertificateARN
+        - CertificateARN: !Ref CertificateARN
 
   S3Bucket:
     Type: 'AWS::S3::Bucket'
@@ -622,6 +623,7 @@ Resources:
   RDSKey:
       Type: AWS::KMS::Key
       Properties:
+        PendingWindowInDays: 7
         KeyPolicy:
           Version: 2012-10-17
           Id: key-rds

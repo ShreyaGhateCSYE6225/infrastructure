@@ -22,7 +22,6 @@ aws cloudformation update-stack --profile demo --region us-east-1 --stack-name d
 aws cloudformation delete-stack --profile demo --region us-east-1 --stack-name devdemo   
 
 # Command to import SSL Certificate into AWS Certificate Manager 
-```shell
 aws acm import-certificate --certificate fileb://prod_shreyaghate_me.crt \
       --certificate-chain fileb://prod_shreyaghate_me.ca-bundle \
       --private-key fileb://prod_shreyaghate_me-privatekey \
