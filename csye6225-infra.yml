@@ -651,8 +651,8 @@ Resources:
     Properties: 
       Description: CloudFormation Sample PostgreSQL Parameter Group
       Family: !Ref RDSParameterGroupFamily
-      # Parameters:
-      #   rds.force_ssl: 1
+      Parameters:
+        rds.force_ssl: 1
       Tags:
       - Key: Name
         Value: myVPC RDS Instance
